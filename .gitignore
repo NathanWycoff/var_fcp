@@ -1,0 +1,6 @@
+*.swp
+*.swo
+*.pdf
+*.pyc
+
+.venv/*
