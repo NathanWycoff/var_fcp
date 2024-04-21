@@ -58,11 +58,12 @@ beta_true = np.repeat(0,P)
 beta_true[0] = 1.
 
 def body_fun_eta(p, val):
-    eta, lam, tau, s, preds = val
+    eta, lam, tau, s, sigma2, preds = val
     pred_other = preds - eta[p] * X[:,p]
     #pred_other = jnp.delete(X, p, axis=1) @ jnp.delete(eta, p)
     resid_other = y - pred_other
-    xdn2 = jnp.sum(jnp.square(X[:,p]))
+    #xdn2 = jnp.sum(jnp.square(X[:,p]))
+    xdn2 = sigma2/s[p]
     ols = jnp.sum(X[:,p] * resid_other) / xdn2
     #s = sigma2 / xdn2
     thresh = (lam[p]*s[p]*tau)/2
@@ -74,14 +75,14 @@ def body_fun_eta(p, val):
 
     preds = pred_other + eta[p] * X[:,p]
 
-    return eta, lam, tau, s, preds
+    return eta, lam, tau, s, sigma2, preds
 
 def update_eta_pre(eta, lam, X, y, sigma2, tau, s):
     N,P = X.shape #TOOD: self reference.
 
     preds = X @ eta
-    val = (eta, lam, tau, s, preds)
-    eta, lam, tau, s, preds  = jax.lax.fori_loop(0, P, body_fun_eta, val)
+    val = (eta, lam, tau, s, sigma2, preds)
+    eta, lam, tau, s, sigma2, preds  = jax.lax.fori_loop(0, P, body_fun_eta, val)
 
     return eta
 
