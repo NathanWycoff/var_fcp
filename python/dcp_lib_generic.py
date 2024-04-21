@@ -21,26 +21,25 @@ P = 3
 #N = 10000
 #P = 1000
 
+### FCP/Variational Specification
 def prox_P(x, sx):
     true_pred = lambda: 0.
     false_pred = lambda: x + jnp.sign(x) * lambertw(-sx * jnp.exp(-jnp.abs(x)))
     x = jax.lax.cond(jnp.abs(x) < sx, true_pred, false_pred)
     return x
 
-def lam_h(lam, eta, tau):
-    return jnp.sum(tau*jnp.exp(-lam*jnp.abs(eta)) - jnp.log(lam))
-def lam_g(lam, s):
-    return jnp.sum(1./(s*jnp.square(lam)))
-def lam_cost(lam, eta, tau, s):
-    return lam_g(lam,s) - lam_h(lam,eta,tau)
+v_f = 2.
 
-#lam_hp = jax.jit(jax.grad(lam_h))
-lam_hp = jax.grad(lam_h)
+P_FCP = lambda x: -jnp.exp(-jnp.abs(x))
+dP_FCP = lambda x: jnp.sign(x)*jnp.exp(-jnp.abs(x))
+if dP_FCP is None:
+    dP_FCP = jax.grad(P_FCP)
+
+###
 
 def body_fun_lam(val):
     eta, lam, tau, s, diff, thresh, it, max_iters = val
-    hplam = lam_hp(lam, eta, tau)
-    new_lam = jnp.power(2./(-s*hplam), 1./3)
+    new_lam = jnp.power(v_f/(s*(eta*dP_FCP(lam*eta)+1/lam)), 1./3)
     diff = jnp.max(jnp.abs(new_lam-lam))
     return eta, new_lam, tau, s, diff, thresh, it+1, max_iters
 
