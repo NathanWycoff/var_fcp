@@ -21,21 +21,40 @@ P = 3
 #N = 10000
 #P = 1000
 
+#penalty = 'laplace'
+penalty = 'MCP'
+
 ### FCP/Variational Specification
-def prox_P(x, sx):
-    true_pred = lambda: 0.
-    false_pred = lambda: x + jnp.sign(x) * lambertw(-sx * jnp.exp(-jnp.abs(x)))
-    x = jax.lax.cond(jnp.abs(x) < sx, true_pred, false_pred)
-    return x
+if penalty=='laplace':
+    def prox_P(x, s):
+        true_pred = lambda: 0.
+        false_pred = lambda: x + jnp.sign(x) * lambertw(-s * jnp.exp(-jnp.abs(x)))
+        ret = jax.lax.cond(jnp.abs(x) < s, true_pred, false_pred)
+        return ret
 
-v_f = 2.
+    P_FCP = lambda x: -jnp.exp(-jnp.abs(x))
+    dP_FCP = lambda x: jnp.sign(x)*jnp.exp(-jnp.abs(x))
 
-P_FCP = lambda x: -jnp.exp(-jnp.abs(x))
-dP_FCP = lambda x: jnp.sign(x)*jnp.exp(-jnp.abs(x))
+    get_Q = lambda eta, lam: tfd.Laplace(loc=eta, scale = 1/lam)
+
+elif penalty=='MCP':
+    def prox_P(x, s):
+        interp = jnp.sign(x)*(jnp.abs(x)-s)/(1.-s)
+        smol_s = jnp.minimum(x,jnp.maximum(0.,interp))
+        # Protect against division by 0 in case s=1.
+        big_s = jax.lax.cond(jnp.abs(x)<s, lambda: 0., lambda: x)
+        ret = jax.lax.cond(s<1., lambda: smol_s, lambda: big_s)
+        return ret
+
+    P_FCP = lambda x: 0.5 * jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
+
+    get_Q = lambda eta, lam: tfp.distributions.Triangular(low=eta-1/lam, high=eta+1/lam, peak=eta)
+else:
+    raise Exception("Unknown Penalty")
+
 if dP_FCP is None:
     dP_FCP = jax.grad(P_FCP)
-
-get_Q = lambda eta, lam: tfd.Laplace(loc=eta, scale = 1/lam)
+v_f = get_Q(0,1).variance()
 
 ###
 
@@ -151,9 +170,13 @@ top_vars = np.argpartition(ntnz, -K_plot)[-K_plot:]
 cols = [matplotlib.colormaps['tab20'](i) for i in range(K_plot)]
 
 Q = get_Q(etas, lams)
-lb = Q.quantile(0.025)
-ub = Q.quantile(0.975)
-med = Q.quantile(0.5)
+#lb = Q.quantile(0.025)
+#ub = Q.quantile(0.975)
+#med = Q.quantile(0.5)
+print("Warning: not quantiles!")
+med = Q.mean()
+lb = Q.mean() - 2*jnp.sqrt(Q.variance())
+ub = Q.mean() + 2*jnp.sqrt(Q.variance())
 
 fig = plt.figure()
 for vi,v in enumerate(top_vars):
