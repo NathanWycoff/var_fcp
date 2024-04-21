@@ -35,6 +35,8 @@ dP_FCP = lambda x: jnp.sign(x)*jnp.exp(-jnp.abs(x))
 if dP_FCP is None:
     dP_FCP = jax.grad(P_FCP)
 
+get_Q = lambda eta, lam: tfd.Laplace(loc=eta, scale = 1/lam)
+
 ###
 
 def body_fun_lam(val):
@@ -148,11 +150,16 @@ top_vars = np.argpartition(ntnz, -K_plot)[-K_plot:]
 
 cols = [matplotlib.colormaps['tab20'](i) for i in range(K_plot)]
 
+Q = get_Q(etas, lams)
+lb = Q.quantile(0.025)
+ub = Q.quantile(0.975)
+med = Q.quantile(0.5)
+
 fig = plt.figure()
 for vi,v in enumerate(top_vars):
-    plt.plot(tau_range, etas[:,v], color = cols[vi])
-    plt.plot(tau_range, etas[:,v] + 2.3*1/lams[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
-    plt.plot(tau_range, etas[:,v] - 2.3*1/lams[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
+    plt.plot(tau_range, med[:,v], color = cols[vi])
+    plt.plot(tau_range, ub[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
+    plt.plot(tau_range, lb[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
 plt.plot(tau_range, np.delete(etas, top_vars, axis = 1), color = 'gray')
 plt.xscale('log')
 plt.savefig("traj.pdf")
