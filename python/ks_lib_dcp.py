@@ -16,10 +16,10 @@ import scipy.stats as ss
 
 np.random.seed(123)
 
-N = 1000
-P = 3
-#N = 10000
-#P = 1000
+#N = 1000
+#P = 3
+N = 10000
+P = 1000
 
 def lam_h(lam, eta, tau):
     return jnp.sum(tau/2*jnp.exp(-lam*jnp.abs(eta)) - jnp.log(lam))
@@ -42,7 +42,7 @@ def cond_fun_lam(val):
     eta, lam, tau, s, diff, thresh, it, max_iters = val
     return jnp.logical_and(diff > thresh, it<max_iters)
 
-def update_lam(eta, lam, tau, s, thresh = 1e-6, max_iters = 100):
+def update_lam_pre(eta, lam, tau, s, thresh = 1e-6, max_iters = 100):
     it = 0
     thresh = 1e-6
 
@@ -76,11 +76,8 @@ def body_fun_eta(p, val):
 
     return eta, lam, tau, s, preds
 
-def update_eta(eta, lam, X, y, sigma2, tau):
+def update_eta_pre(eta, lam, X, y, sigma2, tau, s):
     N,P = X.shape #TOOD: self reference.
-
-    x2 = jnp.sum(jnp.square(X), axis=0)
-    s = sigma2 / x2
 
     preds = X @ eta
     val = (eta, lam, tau, s, preds)
@@ -91,8 +88,8 @@ def update_eta(eta, lam, X, y, sigma2, tau):
 block_iters = 100
 block_thresh = 1e-6
 
-eta_jit = jax.jit(update_eta)
-lam_jit = jax.jit(update_lam)
+update_eta = jax.jit(update_eta_pre)
+update_lam = jax.jit(update_lam_pre)
 
 x2 = jnp.sum(jnp.square(X), axis=0)
 s = sigma2 / x2
@@ -122,8 +119,8 @@ for t, tau in enumerate(tqdm(tau_range)):
         it += 1
         eta_last = jnp.copy(eta)
         lam_last = jnp.copy(lam)
-        eta = eta_jit(eta, lam, X, y, sigma2, tau)
-        lam = lam_jit(eta, lam, tau, s)
+        eta = update_eta(eta, lam, X, y, sigma2, tau, s)
+        lam = update_lam(eta, lam, tau, s)
 
         diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
 
