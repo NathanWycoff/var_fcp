@@ -77,14 +77,14 @@ def body_fun_eta(p, val):
 
     return eta, lam, tau, s, sigma2, preds
 
-def update_eta_pre(eta, lam, X, y, sigma2, tau, s):
+def update_eta_pre(eta, lam, X, y, sigma2, tau, s, preds):
     N,P = X.shape #TOOD: self reference.
 
-    preds = X @ eta
+    #preds = X @ eta
     val = (eta, lam, tau, s, sigma2, preds)
     eta, lam, tau, s, sigma2, preds  = jax.lax.fori_loop(0, P, body_fun_eta, val)
 
-    return eta
+    return eta, preds
 
 block_iters = 100
 block_thresh = 1e-6
@@ -97,21 +97,29 @@ s = sigma2 / x2
 
 max_nnz = 40
 
-tau_max = 1e8
+## Get tau_max
+tau_max = np.max(np.abs(X.T @ y))/2
+#tau_max = 1e8
 tau_min = 1e-4
 T = 100
 tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
+## First order stationarity.
 
 ## Init params
 eta = jnp.zeros(P)
 #lam = 1/np.sqrt(np.diag(sigma2 * np.linalg.inv(X.T @ X))/2)
-lam = 1/np.sqrt(sigma2 / (2*x2))
+#lam = 1/np.sqrt(sigma2 / (2*x2))
+lam = 1/np.sqrt(s)
 
 etas = np.zeros([T, P])*np.nan
 lams = np.zeros([T, P])*np.nan
 
 X = jnp.array(X)
 y = jnp.array(y)
+
+assert np.all(eta==0)
+#preds = X @ eta
+preds = jnp.zeros(N)
 
 for t, tau in enumerate(tqdm(tau_range)):
     it = 0
@@ -120,7 +128,7 @@ for t, tau in enumerate(tqdm(tau_range)):
         it += 1
         eta_last = jnp.copy(eta)
         lam_last = jnp.copy(lam)
-        eta = update_eta(eta, lam, X, y, sigma2, tau, s)
+        eta, preds = update_eta(eta, lam, X, y, sigma2, tau, s, preds)
         lam = update_lam(eta, lam, tau, s)
 
         diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
