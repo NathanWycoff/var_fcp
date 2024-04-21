@@ -16,7 +16,7 @@ import scipy.stats as ss
 
 np.random.seed(123)
 
-N = 100
+N = 1000
 P = 3
 #N = 10000
 #P = 1000
@@ -24,22 +24,21 @@ P = 3
 def lam_h(lam, eta, tau):
     return jnp.sum(tau/2*jnp.exp(-lam*jnp.abs(eta)) - jnp.log(lam))
 def lam_g(lam, s):
-    return jnp.sum(0.5*s/jnp.square(lam))
+    return jnp.sum(1./(2.*s*jnp.square(lam)))
 def lam_cost(lam, eta, tau, s):
     return lam_g(lam,s) - lam_h(lam,eta,tau)
 
 #lam_hp = jax.jit(jax.grad(lam_h))
 lam_hp = jax.grad(lam_h)
 
-## Jax implementation
-def body_fun(val):
+def body_fun_lam(val):
     eta, lam, tau, s, diff, thresh, it, max_iters = val
     hplam = lam_hp(lam, eta, tau)
-    new_lam = jnp.power(s/(-hplam), 1./3)
+    new_lam = jnp.power(1/(-s*hplam), 1./3)
     diff = jnp.max(jnp.abs(new_lam-lam))
     return eta, new_lam, tau, s, diff, thresh, it+1, max_iters
 
-def cond_fun(val):
+def cond_fun_lam(val):
     eta, lam, tau, s, diff, thresh, it, max_iters = val
     return jnp.logical_and(diff > thresh, it<max_iters)
 
@@ -49,7 +48,7 @@ def update_lam(eta, lam, tau, s, thresh = 1e-6, max_iters = 100):
 
     diff = np.inf
     val = (eta, lam, tau, s, diff, thresh, 0, max_iters)
-    eta, lam, tau, s, diff, thresh, it, max_iters = jax.lax.while_loop(cond_fun, body_fun, val)
+    eta, lam, tau, s, diff, thresh, it, max_iters = jax.lax.while_loop(cond_fun_lam, body_fun_lam, val)
     return lam
 
 X = np.random.normal(size=[N,P])
@@ -88,25 +87,6 @@ def update_eta(eta, lam, X, y, sigma2, tau):
     eta, lam, tau, s, preds  = jax.lax.fori_loop(0, P, body_fun_eta, val)
 
     return eta
-
-#def update_eta(eta, lam, X, y, sigma2, tau):
-#    N,P = X.shape #TOOD: self reference.
-#
-#    # TODO: Use jax for loop?
-#    for p in range(P):
-#        pred_other = jnp.delete(X, p, axis=1) @ jnp.delete(eta, p)
-#        resid_other = y - pred_other
-#        xdn2 = jnp.sum(jnp.square(X[:,p]))
-#        ols = jnp.sum(X[:,p] * resid_other) / xdn2
-#        s = sigma2 / xdn2
-#        thresh = (lam[p]*s*tau)/(2)
-#
-#        true_pred = lambda: 0.
-#        false_pred = lambda: ols + jnp.sign(ols) * (1/lam[p] * lambertw(-(s*tau*jnp.square(lam[p]))/(2) * jnp.exp(-jnp.abs(ols)*lam[p])))
-#        eta_new = jax.lax.cond(jnp.abs(ols) < thresh, true_pred, false_pred)
-#        eta = eta.at[p].set(eta_new)
-#
-#    return eta
 
 block_iters = 100
 block_thresh = 1e-6
@@ -154,7 +134,6 @@ for t, tau in enumerate(tqdm(tau_range)):
     if nnz >= max_nnz:
         break
 
-
 K_plot = np.min([5,P])
 
 ntnz = np.sum(etas!=0, axis = 0)
@@ -167,7 +146,6 @@ for vi,v in enumerate(top_vars):
     plt.plot(tau_range, etas[:,v], color = cols[vi])
     plt.plot(tau_range, etas[:,v] + 2.3*1/lams[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
     plt.plot(tau_range, etas[:,v] - 2.3*1/lams[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
-plt.ylim(-1,2)
 plt.xscale('log')
 plt.savefig("traj.pdf")
 plt.close()
