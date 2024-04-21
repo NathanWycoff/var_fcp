@@ -12,14 +12,13 @@ tfd = tfp.distributions
 from tqdm import tqdm
 import matplotlib
 matplotlib.use('Agg')
-import scipy.stats as ss
 
 np.random.seed(123)
 
-#N = 1000
-#P = 3
-N = 10000
-P = 1000
+N = 1000
+P = 3
+#N = 10000
+#P = 1000
 
 def lam_h(lam, eta, tau):
     return jnp.sum(tau/2*jnp.exp(-lam*jnp.abs(eta)) - jnp.log(lam))
@@ -52,20 +51,17 @@ def update_lam_pre(eta, lam, tau, s, thresh = 1e-6, max_iters = 100):
     return lam
 
 X = np.random.normal(size=[N,P])
-sigma2 = np.square(1)
-y = X[:,0] + np.random.normal(scale=sigma2,size=N)
+sigma2_true = np.square(1)
+y = X[:,0] + np.random.normal(scale=sigma2_true,size=N)
 beta_true = np.repeat(0,P)
 beta_true[0] = 1.
 
 def body_fun_eta(p, val):
     eta, lam, tau, s, sigma2, preds = val
     pred_other = preds - eta[p] * X[:,p]
-    #pred_other = jnp.delete(X, p, axis=1) @ jnp.delete(eta, p)
     resid_other = y - pred_other
-    #xdn2 = jnp.sum(jnp.square(X[:,p]))
     xdn2 = sigma2/s[p]
     ols = jnp.sum(X[:,p] * resid_other) / xdn2
-    #s = sigma2 / xdn2
     thresh = (lam[p]*s[p]*tau)/2
 
     true_pred = lambda: 0.
@@ -78,9 +74,8 @@ def body_fun_eta(p, val):
     return eta, lam, tau, s, sigma2, preds
 
 def update_eta_pre(eta, lam, X, y, sigma2, tau, s, preds):
-    N,P = X.shape #TOOD: self reference.
+    N,P = X.shape 
 
-    #preds = X @ eta
     val = (eta, lam, tau, s, sigma2, preds)
     eta, lam, tau, s, sigma2, preds  = jax.lax.fori_loop(0, P, body_fun_eta, val)
 
@@ -92,14 +87,14 @@ block_thresh = 1e-6
 update_eta = jax.jit(update_eta_pre)
 update_lam = jax.jit(update_lam_pre)
 
+sigma2_hat = np.mean(np.square(y))
 x2 = jnp.sum(jnp.square(X), axis=0)
-s = sigma2 / x2
+s = sigma2_hat / x2
 
 max_nnz = 40
 
 ## Get tau_max
 tau_max = np.max(np.abs(X.T @ y))/2
-#tau_max = 1e8
 tau_min = 1e-4
 T = 100
 tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
@@ -107,18 +102,16 @@ tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
 
 ## Init params
 eta = jnp.zeros(P)
-#lam = 1/np.sqrt(np.diag(sigma2 * np.linalg.inv(X.T @ X))/2)
-#lam = 1/np.sqrt(sigma2 / (2*x2))
 lam = 1/np.sqrt(s)
 
 etas = np.zeros([T, P])*np.nan
 lams = np.zeros([T, P])*np.nan
+sigma2s = np.zeros(T)*np.nan
 
 X = jnp.array(X)
 y = jnp.array(y)
 
 assert np.all(eta==0)
-#preds = X @ eta
 preds = jnp.zeros(N)
 
 for t, tau in enumerate(tqdm(tau_range)):
@@ -128,13 +121,18 @@ for t, tau in enumerate(tqdm(tau_range)):
         it += 1
         eta_last = jnp.copy(eta)
         lam_last = jnp.copy(lam)
-        eta, preds = update_eta(eta, lam, X, y, sigma2, tau, s, preds)
+        eta, preds = update_eta(eta, lam, X, y, sigma2_hat, tau, s, preds)
         lam = update_lam(eta, lam, tau, s)
 
         diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
 
     etas[t,:] = eta
     lams[t,:] = lam
+
+    ## Update variance estimate.
+    sigma2_hat = np.mean(np.square(y-preds))
+    s = sigma2_hat / x2
+    sigma2s[t] = sigma2_hat
 
     nnz = np.sum(eta!=0)
     if nnz >= max_nnz:
@@ -152,6 +150,7 @@ for vi,v in enumerate(top_vars):
     plt.plot(tau_range, etas[:,v], color = cols[vi])
     plt.plot(tau_range, etas[:,v] + 2.3*1/lams[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
     plt.plot(tau_range, etas[:,v] - 2.3*1/lams[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
+plt.plot(tau_range, np.delete(etas, top_vars, axis = 1), color = 'gray')
 plt.xscale('log')
 plt.savefig("traj.pdf")
 plt.close()
