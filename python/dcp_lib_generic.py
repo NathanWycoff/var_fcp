@@ -16,8 +16,14 @@ matplotlib.use('Agg')
 from python.tfp_plus import tri_quant
 
 class SblNet(object):
-    def __init__(self, X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf'):
+    def __init__(self, X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf', add_intercept = True):
         N,P = X.shape
+
+        if add_intercept:
+            X = np.concatenate([np.ones([N,1]), X], axis = 1)
+            if XX is not None:
+                XX = np.concatenate([np.ones([XX.shape[0],1]), XX], axis = 1)
+            P += 1
 
         ### FCP/Variational Specification
         if penalty=='laplace':
@@ -234,11 +240,14 @@ if __name__=='__main__':
     X = np.random.normal(size=[N,P])
     XX = np.random.normal(size=[N,P])
     sigma2_true = np.square(1)
-    y = X[:,0] + np.random.normal(scale=sigma2_true,size=N)
-    yy = XX[:,0] + np.random.normal(scale=sigma2_true,size=N)
+    y = X[:,0] + np.random.normal(scale=sigma2_true,size=N) + 50
+    yy = XX[:,0] + np.random.normal(scale=sigma2_true,size=N) + 50
     # TODO: should be used in y generation.
     beta_true = np.repeat(0,P)
     beta_true[0] = 1.
+    
+    sbl = SblNet(X, y, XX=XX, penalty = 'laplace')
+    sbl.Q.mean()[40,:]
 
     beta_hat, yy_hat = pred_sbl(X, y, XX)
 
