@@ -6,6 +6,7 @@ import numpy as np
 from python.dcp_lib_generic import pred_sbl
 from python.ncvreg_wrapper import pred_ncv
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 ## Still to do:
 ## Intercepts!
@@ -46,5 +47,6 @@ for rep in tqdm(range(reps)):
 
 fig = plt.figure()
 plt.boxplot([err_ncv, err_sbl])
+#plt.boxplot(err_ncv-err_sbl)
 plt.savefig("bake.pdf")
 plt.close()
