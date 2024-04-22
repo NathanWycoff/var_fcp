@@ -16,8 +16,17 @@ matplotlib.use('Agg')
 from python.tfp_plus import tri_quant
 
 class SblNet(object):
-    def __init__(self, X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf', add_intercept = True):
+    def __init__(self, X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf', add_intercept = True, scale = True):
         N,P = X.shape
+        if scale:
+            eps_div = 1e-6
+            mu_X = np.mean(X, axis = 0)
+            sig_X = np.std(X, axis = 0)+ eps_div
+            mu_y = np.mean(y) 
+            sig_y = np.std(y) + eps_div
+            X = (X - mu_X[np.newaxis,:]) / sig_X[np.newaxis,:]
+            XX = (XX - mu_X[np.newaxis,:]) / sig_X[np.newaxis,:]
+            y = (y - mu_y) / sig_y
 
         if add_intercept:
             X = np.concatenate([np.ones([N,1]), X], axis = 1)
@@ -167,9 +176,25 @@ class SblNet(object):
         #yy_hat = yy_hat[:t,:]
         #tau_range = tau_range[:t]
 
+        #X = np.array(X)
+        if scale:
+            #X[:,1:] = sig_X[np.newaxis,:] * X[:,1:] + mu_X[np.newaxis,:]
+            #y = sig_y*y + mu_y 
+            yy_hat = sig_y*yy_hat + mu_y 
+
+            int_modif = etas[:,1:] @ (mu_X/sig_X)
+            #etas = etas.at[:,0].set(sig_y*etas[:,0] + mu_y - sig_y * int_modif)
+            #etas = etas.at[:,1:].set(sig_y / sig_X * etas[:,1:])
+            etas[:,0] = sig_y*etas[:,0] + mu_y - sig_y * int_modif
+            etas[:,1:] = sig_y / sig_X * etas[:,1:]
+            lams[:,0] = lams[:,0] / np.square(sig_y)
+            lams[:,1:] = np.square(sig_X / sig_y) * lams[:,1:]
+
         K_plot = np.min([5,P])
 
         ntnz = np.sum(etas!=0, axis = 0)
+        if add_intercept:
+            ntnz[0] = 0
         top_vars = np.argpartition(ntnz, -K_plot)[-K_plot:]
 
         cols = [matplotlib.colormaps['tab20'](i) for i in range(K_plot)]
@@ -189,7 +214,10 @@ class SblNet(object):
             plt.plot(tau_range, med[:,v], color = cols[vi])
             plt.plot(tau_range, ub[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
             plt.plot(tau_range, lb[:,v], color = cols[vi], linestyle='--', alpha = 0.5)
-        plt.plot(tau_range, np.delete(etas, top_vars, axis = 1), color = 'gray')
+        dontplot = top_vars
+        if add_intercept:
+            dontplot = np.concatenate([[0], dontplot])
+        plt.plot(tau_range, np.delete(etas, dontplot, axis = 1), color = 'gray')
         plt.xscale('log')
         plt.savefig(plotname)
         plt.close()
@@ -233,7 +261,7 @@ if __name__=='__main__':
     np.random.seed(123)
 
     N = 1000
-    P = 100
+    P = 95
     #N = 10000
     #P = 1000
 
