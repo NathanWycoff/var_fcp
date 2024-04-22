@@ -14,10 +14,12 @@ from tqdm import tqdm
 import matplotlib
 matplotlib.use('Agg')
 
+from python.tfp_plus import tri_quant
+
 np.random.seed(123)
 
 N = 1000
-P = 3
+P = 100
 #N = 10000
 #P = 1000
 
@@ -33,7 +35,7 @@ if penalty=='laplace':
         return ret
 
     P_FCP = lambda x: -jnp.exp(-jnp.abs(x))
-    dP_FCP = lambda x: jnp.sign(x)*jnp.exp(-jnp.abs(x))
+    #dP_FCP = lambda x: jnp.sign(x)*jnp.exp(-jnp.abs(x))
 
     get_Q = lambda eta, lam: tfd.Laplace(loc=eta, scale = 1/lam)
 
@@ -52,8 +54,8 @@ elif penalty=='MCP':
 else:
     raise Exception("Unknown Penalty")
 
-if dP_FCP is None:
-    dP_FCP = jax.grad(P_FCP)
+#if dP_FCP is None:
+dP_FCP = jax.vmap(jax.grad(P_FCP))
 v_f = get_Q(0,1).variance()
 
 ###
@@ -170,13 +172,18 @@ top_vars = np.argpartition(ntnz, -K_plot)[-K_plot:]
 cols = [matplotlib.colormaps['tab20'](i) for i in range(K_plot)]
 
 Q = get_Q(etas, lams)
-#lb = Q.quantile(0.025)
-#ub = Q.quantile(0.975)
-#med = Q.quantile(0.5)
-print("Warning: not quantiles!")
-med = Q.mean()
-lb = Q.mean() - 2*jnp.sqrt(Q.variance())
-ub = Q.mean() + 2*jnp.sqrt(Q.variance())
+if penalty=='MCP':
+    lb = tri_quant(Q, 0.025)
+    ub = tri_quant(Q, 0.975)
+    med = tri_quant(Q, 0.5)
+else:
+    lb = Q.quantile(0.025)
+    ub = Q.quantile(0.975)
+    med = Q.quantile(0.5)
+#print("Warning: not quantiles!")
+#med = Q.mean()
+#lb = Q.mean() - 2*jnp.sqrt(Q.variance())
+#ub = Q.mean() + 2*jnp.sqrt(Q.variance())
 
 fig = plt.figure()
 for vi,v in enumerate(top_vars):
