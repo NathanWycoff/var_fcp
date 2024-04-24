@@ -129,6 +129,8 @@ class SblNet(object):
         self.update_lam = update_lam
 
     def _cv_select_tauind(self):
+        stop("First, you cant use tau indices when the tau_range is different")
+        stop("Second, shouldn't we be N-normalizing these guys?")
         cv_folds = 5
         inds = np.arange(self.N)
         np.random.shuffle(inds)
