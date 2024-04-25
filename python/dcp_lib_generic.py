@@ -15,7 +15,7 @@ matplotlib.use('Agg')
 
 from python.tfp_plus import tri_quant
 
-def pred_sbl(X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf', add_intercept = True, scale = True):
+def pred_sbl(X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf', add_intercept = True, scale = True, verbose = False):
     N,P = X.shape
     X = jnp.array(X)
     y = jnp.array(y)
@@ -118,7 +118,7 @@ def pred_sbl(X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf', add_in
         diff = np.inf
         val = (eta, lam, tau, s, diff, thresh, 0, max_iters)
         eta, lam, tau, s, diff, thresh, it, max_iters = jax.lax.while_loop(cond_fun_lam, body_fun_lam, val)
-        return lam
+        return lam, it
 
     ## eta update functions
     def body_fun_eta(p, val):
@@ -158,8 +158,8 @@ def pred_sbl(X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf', add_in
 
     ## Get tau_max
     tau_max = np.max(np.abs(X.T @ y)) # Evaluate range on full dataset.
-    tau_min = 1e-4
-    T = 100
+    tau_min = 1e-3*tau_max if N>P else 0.05*tau_max #following ncvreg
+    T = 1000
     tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
     ## First order stationarity.
 
@@ -176,6 +176,8 @@ def pred_sbl(X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf', add_in
     yy_hat = [np.zeros([T,NNs[k]])*np.nan for k in range(K)]
     preds = [X_train[k] @ eta[k,:] for k in range(K)]
 
+    lam_maxit = 100
+
     for t, tau in enumerate(tqdm(tau_range)):
         tau_effective = tau*Ns/Ns[-1]
         it = 0
@@ -185,9 +187,17 @@ def pred_sbl(X, y, XX = None, penalty = 'laplace', plotname = 'traj.pdf', add_in
             eta_last = jnp.copy(eta)
             lam_last = jnp.copy(lam)
             eta, preds = update_eta(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds)
-            lam = update_lam(eta, lam, tau_effective, s)
+            lam, lam_it = update_lam(eta, lam, tau_effective, s, max_iters = lam_maxit)
+
+            if lam_it == lam_maxit and verbose:
+                print("Reached max iters on lam update.")
 
             diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
+
+        if verbose:
+            if it==block_iters:
+                print("Reached Max Iters on outer block.")
+            #print("Stopped main loop on tau %d after %d iters with %d nnz"%(t,it,np.sum(eta!=0)))
 
         etas[t,:,:] = eta
         lams[t,:,:] = lam
@@ -294,17 +304,15 @@ if __name__=='__main__':
     beta_true = np.repeat(0,P)
     beta_true[0] = 1.
 
-    sbl = SblNet(X, y, XX=XX, penalty = 'laplace')
-    sbl.Q.mean()[40,:]
-
-    beta_hat, yy_hat = pred_sbl(X, y, XX)
+    beta_sbl_dist, yy_sbl = pred_sbl(X, y, XX)
+    beta_sbl = beta_sbl_dist.mean()[1:]
 
     beta_ols = np.linalg.lstsq(X, y)[0]
     yy_ols = XX @ beta_ols
 
-    print(np.sum(np.square(beta_hat - beta_true)))
+    print(np.sum(np.square(beta_sbl - beta_true)))
     print(np.sum(np.square(beta_ols - beta_true)))
 
-    print(np.sum(np.square(yy_hat - yy)))
+    print(np.sum(np.square(yy_sbl - yy)))
     print(np.sum(np.square(yy_ols - yy)))
 

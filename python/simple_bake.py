@@ -39,8 +39,11 @@ for rep in tqdm(range(reps)):
     y = X1@beta_true + np.random.normal(scale=sigma2_true,size=N)
     yy = XX1@beta_true + np.random.normal(scale=sigma2_true,size=NN)
 
-    beta_sbl_dist, yy_sbl = pred_sbl(X, y, XX)
+    addint = False
+    beta_sbl_dist, yy_sbl = pred_sbl(X, y, XX, penalty = 'MCP', scale = False, add_intercept = addint)
     beta_sbl = beta_sbl_dist.mean()
+    if not addint:
+        beta_sbl = np.concatenate([[0], beta_sbl])
     beta_ncv, yy_ncv = pred_ncv(X, y, XX)
 
     err_sbl[rep] = np.mean(np.square(beta_sbl - beta_true))
