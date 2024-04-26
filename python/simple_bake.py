@@ -5,7 +5,7 @@
 import numpy as np
 #from python.rec_with_ncvreg_lab.py import pred_sbl
 exec(open('python/rec_with_ncvreg_lab.py').read())
-from python.ncvreg_wrapper import pred_ncv
+from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -46,14 +46,13 @@ for rep in tqdm(range(reps)):
     beta_ncv = beta_ncv[1:]
 
     # Funsies
-    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = False)
+    #beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = False)
+    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True)
     beta_ncv, yy_ncv = pred_ncv(X, y, XX)
     beta_ncv = beta_ncv[1:]
 
-
     err_sbl[rep] = np.mean(np.square(beta_sbl - beta_true))
     err_ncv[rep] = np.mean(np.square(beta_ncv - beta_true))
-
 
 fig = plt.figure()
 plt.boxplot([err_ncv, err_sbl])
