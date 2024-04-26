@@ -11,7 +11,6 @@ from rpy2.robjects import numpy2ri
 from rpy2.robjects import default_converter
 from rpy2.robjects.packages import importr
 
-test_funcs = {}
 r = robjects.r
 
 ncvreg = importr('ncvreg')
