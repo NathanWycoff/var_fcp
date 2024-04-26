@@ -1,4 +1,6 @@
-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#  lib.py Author "Nathan Wycoff <nathanbrwycoff@gmail.com>" Date 04.25.2024
 
 ### FCP/Variational Specification
 if penalty=='laplace':
@@ -59,7 +61,7 @@ def body_fun_eta(p, val):
     for k in range(K):
         pred_other = preds[k] - eta[k,p] * X_train[k][:,p]
         resid_other = y_train[k] - pred_other
-        xdn2 = sigma2_hat[k]/s[k,p]
+        #xdn2 = sigma2_hat[k]/s[k,p]
         #ols = jnp.sum(X_train[k][:,p] * resid_other) / xdn2
         ols = jnp.mean(X_train[k][:,p] * resid_other)
 
