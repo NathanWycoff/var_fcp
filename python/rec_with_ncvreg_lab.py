@@ -16,20 +16,6 @@ matplotlib.use('Agg')
 import numpy as np
 from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 
-#X = np.array([[1,2],[2,4],[3,9],[4,16]]).astype(float)
-#XX = np.array([[7,8]]).astype(float)
-#y = np.array([1,2,3,4]).astype(float)
-
-#np.random.seed(124)
-#N = 400
-#P = 40
-#X = np.random.normal(size=[N,P])
-#y = np.random.normal(size=[N])
-#XX = np.random.normal(size=[N,P])
-#
-#ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-
-#pred_sbl(X, y, XX)
 
 ################################################################################################
 ## Us
@@ -60,11 +46,20 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     elif penalty=='MCP':
         def prox_P(x, s):
-            interp = jnp.sign(x)*(jnp.abs(x)-s)/(1.-s)
-            smol_s = jnp.minimum(x,jnp.maximum(0.,interp))
-            # Protect against division by 0 in case s=1.
-            big_s = jax.lax.cond(jnp.abs(x)<s, lambda: 0., lambda: x)
-            ret = jax.lax.cond(s<1., lambda: smol_s, lambda: big_s)
+            #interp = jnp.sign(x)*(jnp.abs(x)-s)/(1.-s)
+            #smol_s = jnp.minimum(x,jnp.maximum(0.,interp))
+            ## Protect against division by 0 in case s=1.
+            #big_s = jax.lax.cond(jnp.abs(x)<s, lambda: 0., lambda: x)
+            #ret = jax.lax.cond(s<1., lambda: smol_s, lambda: big_s)
+            #return ret
+            isgtlt = (jnp.abs(x) > s).astype(int)
+            isgtt = (jnp.abs(x)>=1).astype(int)
+            ind = isgtlt + isgtt
+            branches = []
+            branches.append(lambda: 0.)
+            branches.append(lambda: jnp.sign(x)*(jnp.abs(x)-s)/(1-s))
+            branches.append(lambda: x)
+            ret = jax.lax.switch(ind, branches)
             return ret
 
         P_FCP = lambda x: 0.5 * jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
@@ -99,19 +94,35 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         return lam, it
 
     def prox_MCP_manual(z, tau, lam):
-        a = 1/(jnp.square(lam)*tau)
-        gamma = lam*tau
+        #a = 1/(jnp.square(lam)*tau)
+        #gamma = lam*tau
 
-        isgtlt = (jnp.abs(z) > gamma).astype(int)
-        isgtt = (jnp.abs(z)>a*gamma).astype(int)
+        print("Warning: if a=1 we in bad shape?")
+        isgtlt = (jnp.abs(z) > lam*tau).astype(int)
+        isgtt = (jnp.abs(z)>=1/lam).astype(int)
         ind = isgtlt + isgtt
         branches = []
         branches.append(lambda: 0.)
-        branches.append(lambda: jnp.sign(z)*(jnp.abs(z)-gamma)/(1-1/a))
+        branches.append(lambda: jnp.sign(z)*(jnp.abs(z)-lam*tau)/(1-jnp.square(lam)*tau))
         branches.append(lambda: z)
         ret = jax.lax.switch(ind, branches)
 
         return ret
+
+
+
+    #z = -0.04687909
+    #tau = 0.0344094
+    #lam = 3.11243891
+    z = 0.10709716
+    tau = 0.02992754
+    lam = 3.33736622
+
+    prox_MCP_manual(z,tau,lam)
+
+    s = jnp.square(lam)*tau
+    x = lam*z
+    prox_P(x, s) / lam
 
     ## eta update functions
     def body_fun_eta(p, val):
@@ -124,9 +135,14 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             ols = jnp.mean(X_train[k][:,p] * resid_other)
 
             #eta_new = prox_P(ols*lam[k,p], s[k,p]*jnp.square(lam[k,p])*tau_effective[k])/lam[k,p]
-            print("Warning: manual prox")
-            assert penalty=='MCP'
-            eta_new = prox_MCP_manual(ols, tau_effective[k], lam[k,p])
+            eta_new = prox_P(ols*lam[k,p], jnp.square(lam[k,p])*tau_effective[k])/lam[k,p]
+            #print("Warning: manual prox")
+            #assert penalty=='MCP'
+            #eta_new_new = prox_MCP_manual(ols, tau_effective[k], lam[k,p])
+            #eta_new = eta_new_old
+            #eta_new = eta_new_new
+            #if abs(eta_new_old-eta_new_new) > 1e-4:
+            #    import IPython; IPython.embed()
             eta = eta.at[k,p].set(eta_new)
 
             preds[k] = pred_other + eta[k,p] * X_train[k][:,p]
@@ -136,6 +152,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     def update_eta_pre(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds):
         val = (eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train)
         eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train = jax.lax.fori_loop(0, P, body_fun_eta, val)
+        #for p in range(P):
+        #    val = body_fun_eta(p,val)
+        #eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train = val
 
         return eta, preds
     ########################################
@@ -242,7 +261,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     it = 0
     #for t, tau in enumerate(tqdm(tau_range)):
     #t, MCP_LAMBDA = 0, MCP_LAMBDA_max
-    t, MCP_LAMBDA = 1, MCP_LAMBDA_range[1]
+    #t, MCP_LAMBDA = 1, MCP_LAMBDA_range[1]
     for t, MCP_LAMBDA in enumerate(tqdm(MCP_LAMBDA_range)):
         #tau_effective = tau*Ns/Ns[-1]
         a = 3.
@@ -254,7 +273,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             it += 1
             eta_last = jnp.copy(eta)
             #lam_last = jnp.copy(lam)
-            #eta, preds = update_eta_pre(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds)
+            print("Not Jitted!")
             eta, preds = update_eta(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds)
             #lam, lam_it = update_lam(eta, lam, tau_effective, s, max_iters = lam_maxit)
             lam_it = 0
@@ -303,9 +322,20 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #
     #print(ncv_betas[:,-1])
 
-
     Q = get_Q(etas, lams)
     if do_cv:
         return Q[tau_opti,-1,:].mean(), yy_hat[-1][tau_opti,:]
     else:
         return Q.mean(), yy_hat[-1]
+
+if __name__=='__main__':
+    #np.random.seed(124)
+    N = 400
+    P = 40
+    X = np.random.normal(size=[N,P])
+    y = np.random.normal(size=[N])
+    XX = np.random.normal(size=[N,P])
+
+    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+
+    pred_sbl(X, y, XX, do_cv = False)
