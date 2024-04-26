@@ -16,7 +16,6 @@ matplotlib.use('Agg')
 import numpy as np
 from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 
-
 ################################################################################################
 ## Us
 def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True):
@@ -93,36 +92,36 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         eta, lam, tau_effective, s, diff, thresh, it, max_iters = jax.lax.while_loop(cond_fun_lam, body_fun_lam, val)
         return lam, it
 
-    def prox_MCP_manual(z, tau, lam):
-        #a = 1/(jnp.square(lam)*tau)
-        #gamma = lam*tau
+    #def prox_MCP_manual(z, tau, lam):
+    #    #a = 1/(jnp.square(lam)*tau)
+    #    #gamma = lam*tau
 
-        print("Warning: if a=1 we in bad shape?")
-        isgtlt = (jnp.abs(z) > lam*tau).astype(int)
-        isgtt = (jnp.abs(z)>=1/lam).astype(int)
-        ind = isgtlt + isgtt
-        branches = []
-        branches.append(lambda: 0.)
-        branches.append(lambda: jnp.sign(z)*(jnp.abs(z)-lam*tau)/(1-jnp.square(lam)*tau))
-        branches.append(lambda: z)
-        ret = jax.lax.switch(ind, branches)
+    #    print("Warning: if a=1 we in bad shape?")
+    #    isgtlt = (jnp.abs(z) > lam*tau).astype(int)
+    #    isgtt = (jnp.abs(z)>=1/lam).astype(int)
+    #    ind = isgtlt + isgtt
+    #    branches = []
+    #    branches.append(lambda: 0.)
+    #    branches.append(lambda: jnp.sign(z)*(jnp.abs(z)-lam*tau)/(1-jnp.square(lam)*tau))
+    #    branches.append(lambda: z)
+    #    ret = jax.lax.switch(ind, branches)
 
-        return ret
+    #    return ret
 
 
 
     #z = -0.04687909
     #tau = 0.0344094
     #lam = 3.11243891
-    z = 0.10709716
-    tau = 0.02992754
-    lam = 3.33736622
+    #z = 0.10709716
+    #tau = 0.02992754
+    #lam = 3.33736622
 
-    prox_MCP_manual(z,tau,lam)
+    #prox_MCP_manual(z,tau,lam)
 
-    s = jnp.square(lam)*tau
-    x = lam*z
-    prox_P(x, s) / lam
+    #s = jnp.square(lam)*tau
+    #x = lam*z
+    #prox_P(x, s) / lam
 
     ## eta update functions
     def body_fun_eta(p, val):
@@ -273,7 +272,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             it += 1
             eta_last = jnp.copy(eta)
             #lam_last = jnp.copy(lam)
-            print("Not Jitted!")
             eta, preds = update_eta(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds)
             #lam, lam_it = update_lam(eta, lam, tau_effective, s, max_iters = lam_maxit)
             lam_it = 0
@@ -328,14 +326,17 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     else:
         return Q.mean(), yy_hat[-1]
 
-if __name__=='__main__':
-    #np.random.seed(124)
-    N = 400
-    P = 40
-    X = np.random.normal(size=[N,P])
-    y = np.random.normal(size=[N])
-    XX = np.random.normal(size=[N,P])
-
-    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-
-    pred_sbl(X, y, XX, do_cv = False)
+#if __name__=='__main__':
+#    #np.random.seed(124)
+#    N = 400
+#    P = 40
+#    X = np.random.normal(size=[N,P])
+#    y = np.random.normal(size=[N])
+#    XX = np.random.normal(size=[N,P])
+#
+#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+#
+#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False)
+#
+#    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
