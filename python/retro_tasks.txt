@@ -1,0 +1,5 @@
+1) Undo sig y?
+2) Scale by N.
+3) Get sigma_hat back.
+4) Make sure we compile everything again.
+5) Add lam back into the diff for convergence detection.

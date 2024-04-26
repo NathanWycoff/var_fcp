@@ -3,6 +3,8 @@
 #  simple_bake.py Author "Nathan Wycoff <nathanbrwycoff@gmail.com>" Date 04.22.2024
 
 import numpy as np
+print("Using old lib!")
+#from python.old_dcp_lib_generic import pred_sbl
 from python.dcp_lib_generic import pred_sbl
 from python.ncvreg_wrapper import pred_ncv
 from tqdm import tqdm
@@ -39,11 +41,7 @@ for rep in tqdm(range(reps)):
     y = X1@beta_true + np.random.normal(scale=sigma2_true,size=N)
     yy = XX1@beta_true + np.random.normal(scale=sigma2_true,size=NN)
 
-    addint = False
-    beta_sbl_dist, yy_sbl = pred_sbl(X, y, XX, penalty = 'MCP', scale = False, add_intercept = addint)
-    beta_sbl = beta_sbl_dist.mean()
-    if not addint:
-        beta_sbl = np.concatenate([[0], beta_sbl])
+    beta_sbl, yy_sbl = pred_sbl(X, y, XX)
     beta_ncv, yy_ncv = pred_ncv(X, y, XX)
 
     err_sbl[rep] = np.mean(np.square(beta_sbl - beta_true))

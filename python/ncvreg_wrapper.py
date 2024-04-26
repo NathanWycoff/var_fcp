@@ -31,3 +31,19 @@ def pred_ncv(X, y, XX):
     yy_hat = r.predict(fit, XX_R)
 
     return beta_hat, yy_hat
+
+def pred_ncv_no_cv(X, y, XX):
+    X_arr = robjects.FloatVector(X.T.flatten())
+    X_R = robjects.r['matrix'](X_arr, nrow = X.shape[0])
+
+    XX_arr = robjects.FloatVector(XX.T.flatten())
+    XX_R = robjects.r['matrix'](XX_arr, nrow = XX.shape[0])
+
+    y_arr = robjects.FloatVector(y)
+    y_R = robjects.r['matrix'](y_arr, ncol = 1)
+
+    fit = ncvreg.ncvreg(X_R, y_R)
+    beta_hat = r.coef(fit)
+    yy_hat = r.predict(fit, XX_R)
+
+    return beta_hat, yy_hat
