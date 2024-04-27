@@ -51,6 +51,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             #big_s = jax.lax.cond(jnp.abs(x)<s, lambda: 0., lambda: x)
             #ret = jax.lax.cond(s<1., lambda: smol_s, lambda: big_s)
             #return ret
+            s *= 2 # Because this is a cdf.
             isgtlt = (jnp.abs(x) > s).astype(int)
             isgtt = (jnp.abs(x)>=1).astype(int)
             ind = isgtlt + isgtt
@@ -61,7 +62,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             ret = jax.lax.switch(ind, branches)
             return ret
 
-        P_FCP = lambda x: 0.5 * jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
+        #P_FCP = lambda x: 0.5*jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
+        P_FCP = lambda x: jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
 
         get_Q = lambda eta, lam: tfp.distributions.Triangular(low=eta-1/lam, high=eta+1/lam, peak=eta)
     else:
@@ -221,7 +223,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             y_test[k] = (y_test[k] - mu_y[k]) / sig_y[k]
 
     ## Get tau_max
-    MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
+    MCP_LAMBDA_max = 0.5*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
     MCP_LAMBDA_min = 1e-3*MCP_LAMBDA_max if N>P else 5e-2*MCP_LAMBDA_max
     T = 100
     MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max), num = T))
@@ -242,10 +244,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     ## Init params
     eta = jnp.zeros([K,P])
-    #lam = jnp.array(1/np.sqrt(s))
-    a = 3.
-    lam = np.ones([K, P])
-    lam, lam_it = update_lam(jnp.zeros([K,P]), lam, tau_effective, s, max_iters = lam_maxit)
+    if not novar:
+        lam = np.ones([K, P])
+        lam, lam_it = update_lam(jnp.zeros([K,P]), lam, tau_effective, s, max_iters = lam_maxit)
 
     etas = np.zeros([T, K, P])*np.nan
     lams = np.zeros([T, K, P])*np.nan
@@ -263,7 +264,10 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #t, MCP_LAMBDA = 1, MCP_LAMBDA_range[1]
     for t, MCP_LAMBDA in enumerate(tqdm(MCP_LAMBDA_range)):
         #tau_effective = tau*Ns/Ns[-1]
-        #a = 3.
+        if novar:
+            #a = 3.
+            a = 2*3.
+            lam = np.ones([K, P]) * 1/(a*MCP_LAMBDA)
         tau_effective = jnp.array([a*jnp.square(MCP_LAMBDA) for _ in range(K)])
 
         sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
@@ -275,11 +279,10 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             eta_last = jnp.copy(eta)
             lam_last = jnp.copy(lam)
             eta, preds = update_eta(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds)
-            lam, lam_it = update_lam(eta, lam, tau_effective, s, max_iters = lam_maxit)
-            #print(eta)
-
-            if lam_it == lam_maxit and verbose:
-                print("Reached max iters on lam update.")
+            if not novar:
+                lam, lam_it = update_lam(eta, lam, tau_effective, s, max_iters = lam_maxit)
+                if lam_it == lam_maxit and verbose:
+                    print("Reached max iters on lam update.")
 
             diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
             #diff = jnp.max(jnp.abs(eta_last-eta))
@@ -336,7 +339,7 @@ if __name__=='__main__':
 
     ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
 
-    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False)
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
 
     print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
     print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
