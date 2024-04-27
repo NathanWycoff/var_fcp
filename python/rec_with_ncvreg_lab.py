@@ -21,7 +21,7 @@ from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 ################################################################################################
 ## Us
 def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True):
-    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf
+    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'
     N,P = X.shape
     X = jnp.array(X)
     y = jnp.array(y)
@@ -53,19 +53,29 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             #big_s = jax.lax.cond(jnp.abs(x)<s, lambda: 0., lambda: x)
             #ret = jax.lax.cond(s<1., lambda: smol_s, lambda: big_s)
             #return ret
-            s *= 2 # Because this is a cdf.
+            print("Warning: MCP prox ignore equality edge cases.")
+            #s *= 2 # Because this is a cdf.
+
             isgtlt = (jnp.abs(x) > s).astype(int)
             isgtt = (jnp.abs(x)>=1).astype(int)
+            #isgtt = (jnp.abs(z)>=1).astype(int)*(s<1).astype(int)
             ind = isgtlt + isgtt
             branches = []
             branches.append(lambda: 0.)
             branches.append(lambda: jnp.sign(x)*(jnp.abs(x)-s)/(1-s))
             branches.append(lambda: x)
-            ret = jax.lax.switch(ind, branches)
+            ret3 = jax.lax.switch(ind, branches)
+
+            #ret2 = jax.lax.cond(x<1., lambda: 0., lambda: x)
+            ret2 = jax.lax.cond(x<jnp.sqrt(s), lambda: 0., lambda: x)
+
+            ret = jax.lax.cond(s<1., lambda: ret3, lambda: ret2)
+
             return ret
 
-        #P_FCP = lambda x: 0.5*jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
-        P_FCP = lambda x: jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
+        P_FCP = lambda x: 0.5*jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
+        #P_FCP = lambda x: jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
+        #dP_FCP = lambda x: jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.sign(x)-2*x, lambda: 0.)
 
         get_Q = lambda eta, lam: tfp.distributions.Triangular(low=eta-1/lam, high=eta+1/lam, peak=eta)
     else:
@@ -74,6 +84,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     # Extract other features of penalty.
     #dP_FCP = jax.vmap(jax.grad(P_FCP))
     dP_FCP = jax.vmap(jax.vmap(jax.grad(P_FCP)))
+    #print("auto dP_FCP may be unreliable at 0.")
     v_f = get_Q(0,1).variance()
 
     ## Lambda update functions.
@@ -96,23 +107,19 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         eta, lam, tau_effective, s, diff, thresh, it, max_iters = jax.lax.while_loop(cond_fun_lam, body_fun_lam, val)
         return lam, it
 
-    #def prox_MCP_manual(z, tau, lam):
+    #def prox_MCP_manual_biga(z, tau, lam):
     #    #a = 1/(jnp.square(lam)*tau)
     #    #gamma = lam*tau
-
-    #    print("Warning: if a=1 we in bad shape?")
+    #    tau *= 2
     #    isgtlt = (jnp.abs(z) > lam*tau).astype(int)
-    #    isgtt = (jnp.abs(z)>=1/lam).astype(int)
+    #    isgtt = (jnp.abs(z)>=1/lam).astype(int)*(lam*tau<1/lam)
     #    ind = isgtlt + isgtt
     #    branches = []
     #    branches.append(lambda: 0.)
     #    branches.append(lambda: jnp.sign(z)*(jnp.abs(z)-lam*tau)/(1-jnp.square(lam)*tau))
     #    branches.append(lambda: z)
     #    ret = jax.lax.switch(ind, branches)
-
     #    return ret
-
-
 
     #z = -0.04687909
     #tau = 0.0344094
@@ -121,11 +128,18 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #tau = 0.02992754
     #lam = 3.33736622
 
-    #prox_MCP_manual(z,tau,lam)
+    #z = ols
+    #tau = tau_effective[k]
+    #lam = lam[k,p]
+    #prox_MCP_manual(ols,tau_effective[k],lam[k,p])
 
     #s = jnp.square(lam)*tau
     #x = lam*z
     #prox_P(x, s) / lam
+
+    #x = ols*lam[k,p]
+    #s = jnp.square(lam[k,p])*tau_effective[k]
+    #prox_P(x, s)
 
     ## eta update functions
     def body_fun_eta(p, val):
@@ -241,7 +255,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     max_nnz = 40
 
     eta = jnp.zeros([K,P])
-    MCP_LAMBDA_max = 0.5*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
+    #MCP_LAMBDA_max = 0.5*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
+    MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
 
     ## Generate penalty sequence.
     T = 100
@@ -256,35 +271,91 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         lam_maxit = 100
         sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
         s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
-        def rangefind(tau):
-            lam, lam_it = update_lam(jnp.zeros([K,P]), np.ones([K, P]), tau, s, max_iters = lam_maxit)
-            #lam, _ = update_lam(jnp.zeros(), 1., tau, s[0], max_iters = lam_maxit)
-            return np.square(lam[0,0]*tau - MCP_LAMBDA_max)
 
-        fig = plt.figure()
-        tt = np.logspace(-4,2)
-        ee = [rangefind(t) for t in tt]
-        plt.plot(tt, ee)
-        plt.xscale('log')
-        plt.yscale('log')
-        plt.savefig("temp.pdf")
-        plt.close()
+        #def rangefind(tau):
+        #    lam_eta0 = jnp.sqrt(v_f/s[0,0])
+        #    if jnp.square(lam_eta0)*tau < 1.:
+        #        ret = np.square(jnp.square(lam[0,0])*tau - MCP_LAMBDA_max)
+        #    else:
+        #        ret = np.square(jnp.sqrt(tau) - MCP_LAMBDA_max)
+        #    #return ret
+        #    return ret
+
+        lam_eta0 = jnp.sqrt(v_f/s[0,0])
+        def rangefind(tau):
+            is_hard = jnp.square(lam_eta0)*tau > 1.
+            big_M = 1e4
+            ret = np.square(jnp.sqrt(tau) - MCP_LAMBDA_max)
+            return ret + big_M*(1-is_hard)
+
 
         opt = minimize_scalar(rangefind)
-        #tau_max = opt.x * (1+1e-1)
-        tau_max = opt.x
+        tau_max = opt.x * (1+1e-1)
+        #tau_max = opt.x 
+        #tau_max = opt.x
         #tau_max = opt.x*1.5
         #tau_max = 1e10
         tau_min = 1e-3*tau_max if N>P else 5e-2*tau_max
         tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
-        lam, lam_it = update_lam(jnp.zeros([K,P]), np.ones([K, P]), tau_max, s, max_iters = lam_maxit)
+
+        fig = plt.figure()
+        tt = np.logspace(-4,2,num=10000)
+        ee = [rangefind(t) for t in tt]
+        plt.plot(tt, ee)
+        plt.xscale('log')
+        plt.yscale('log')
+        ll,ul = plt.gca().get_ylim()
+        plt.vlines(tau_max, ll, ul)
+        plt.savefig("temp.pdf")
+        plt.close()
+
+        lam = jnp.ones([K,P]) * lam_eta0
+
+        #cost = lambda lam: v_f/(2*s[0]*np.square(lam))+np.log(lam)
+        #fig = plt.figure()
+        #tt = np.logspace(-4,2)
+        #ee = [cost(t) for t in tt]
+        #plt.plot(tt, ee)
+        #plt.xscale('log')
+        #plt.yscale('log')
+        #ll,ul = plt.gca().get_ylim()
+        #plt.vlines(aopt, ll, ul, color = 'red')
+        #plt.vlines(lam[0,0], ll, ul, color = 'blue')
+        #plt.savefig("temp.pdf")
+        #plt.close()
+
+        #def rangefind(tau):
+        #    lam, lam_it = update_lam(jnp.zeros([K,P]), np.ones([K, P]), tau, s, max_iters = lam_maxit)
+        #    #lam, _ = update_lam(jnp.zeros(), 1., tau, s[0], max_iters = lam_maxit)
+        #    #if lam[0,0] > 1:
+        #    #    ret = np.square(1/lam[0,0] - MCP_LAMBDA_max)
+        #    #else:
+        #    #    ret = np.square(lam[0,0]*tau - MCP_LAMBDA_max)
+        #    #return ret
+        #    return lam[0,0]
+        #fig = plt.figure()
+        #tt = np.logspace(-4,2)
+        #ee = [rangefind(t) for t in tt]
+        #plt.plot(tt, ee)
+        #plt.xscale('log')
+        #plt.yscale('log')
+        #plt.savefig("temp.pdf")
+        #plt.close()
+        #opt = minimize_scalar(rangefind)
+        #tau_max = opt.x * (1+1e-1)
+        ##tau_max = opt.x
+        ##tau_max = opt.x*1.5
+        ##tau_max = 1e10
+        #tau_min = 1e-3*tau_max if N>P else 5e-2*tau_max
+        #tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
+        #lam, lam_it = update_lam(jnp.zeros([K,P]), np.ones([K, P]), tau_max, s, max_iters = lam_maxit)
 
     ## Init params
 
     #tau_effective = jnp.array([a*jnp.square(MCP_LAMBDA) for _ in range(K)])
-
     etas = np.zeros([T, K, P])*np.nan
     lams = np.zeros([T, K, P])*np.nan
+    lams_a = np.zeros([T, K, P])*np.nan
 
     Ns = jnp.array([Xk.shape[0] for Xk in X_train])
     NNs = jnp.array([Xk.shape[0] for Xk in X_test])
@@ -306,10 +377,11 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     for t, tau in enumerate(tqdm(tau_range)):
         tau_effective = tau*jnp.ones(K)
 
+        a = 2*3.
+        lam_a = np.ones([K, P]) * 1/jnp.sqrt(a*tau)
         if novar:
             #a = 3.
-            #a = 2*3.
-            lam = np.ones([K, P]) * 1/jnp.sqrt(a*tau)
+            lam = lam_a
 
         sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
         s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
@@ -330,6 +402,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
         etas[t,:,:] = eta
         lams[t,:,:] = lam
+        lams_a[t,:,:] = lam_a
         for k in range(K):
             yy_hat[k][t,:] = X_test[k] @ eta[k,:]
 
@@ -359,7 +432,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     NV_plot = np.min([5,P])
     K_plot = np.min([5,P])
 
-    ntnz = np.sum(etas!=0, axis = 0)
+    ntnz = np.sum(etas[:,-1,:]!=0, axis = 0)
     top_vars = np.argpartition(ntnz, -K_plot)[-K_plot:]
 
     cols = [matplotlib.colormaps['tab20'](i) for i in range(K_plot)]
@@ -397,85 +470,17 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     else:
         return Q.mean(), yy_hat[-1]
 
-#if __name__=='__main__':
-#    #np.random.seed(124)
-#    N = 400
-#    P = 40
-#    X = np.random.normal(size=[N,P])
-#    #y = np.random.normal(size=[N])
-#    y = X[:,0] + np.random.normal(size=N)
-#    XX = np.random.normal(size=[N,P])
-#
-#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-#
-#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
-#
-#    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+if __name__=='__main__':
+    #np.random.seed(124)
+    N = 400
+    P = 40
+    X = np.random.normal(size=[N,P])
+    #y = np.random.normal(size=[N])
+    y = X[:,0] + np.random.normal(size=N)
+    XX = np.random.normal(size=[N,P])
 
-#N = 100
-#NN = 1000
-#P = 100
-##N = 10000
-##P = 1000
-#
-#nnz = 10
-#
-#for _ in range(5):
-#    beta_nz = np.random.normal(size=nnz)
-#    nz_locs = np.random.choice(P,nnz,replace=False)
-#    beta_true = np.zeros(P)
-#    beta_true[nz_locs] = beta_nz
-#    beta_true = np.concatenate([[50.], beta_true])
-#    #beta_true = np.concatenate([[0.], beta_true])
-#
-#    X = np.random.normal(size=[N,P])
-#    X1 = np.concatenate([np.ones([N,1]), X], axis = 1)
-#    XX = np.random.normal(size=[NN,P])
-#    XX1 = np.concatenate([np.ones([NN,1]), XX], axis = 1)
-#    sigma2_true = np.square(1)
-#
-#    y = X1@beta_true + np.random.normal(scale=sigma2_true,size=N)
-#    yy = XX1@beta_true + np.random.normal(scale=sigma2_true,size=NN)
-#
-#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-#
-#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
-#
-#    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
-#
-#    print(np.mean(np.square(sbl_betas - beta_true[1:])))
-#    print(np.mean(np.square(ncv_betas[1:] - beta_true[1:])))
+    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
 
-#err_sbl = np.zeros(reps)*np.nan
-#err_ncv = np.zeros(reps)*np.nan
-#for rep in tqdm(range(reps)):
-#    beta_nz = np.random.normal(size=nnz)
-#    nz_locs = np.random.choice(P,nnz,replace=False)
-#    beta_true = np.zeros(P)
-#    beta_true[nz_locs] = beta_nz
-#    beta_true = np.concatenate([[50.], beta_true])
-#    #beta_true = np.concatenate([[0.], beta_true])
-#
-#    X = np.random.normal(size=[N,P])
-#    X1 = np.concatenate([np.ones([N,1]), X], axis = 1)
-#    XX = np.random.normal(size=[NN,P])
-#    XX1 = np.concatenate([np.ones([NN,1]), XX], axis = 1)
-#    sigma2_true = np.square(1)
-#
-#    y = X1@beta_true + np.random.normal(scale=sigma2_true,size=N)
-#    yy = XX1@beta_true + np.random.normal(scale=sigma2_true,size=NN)
-#
-#    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = False)
-#    beta_ncv, yy_ncv = pred_ncv(X, y, XX)
-#    beta_ncv = beta_ncv[1:]
-#
-#    err_sbl[rep] = np.mean(np.square(beta_sbl - beta_true[1:]))
-#    err_ncv[rep] = np.mean(np.square(beta_ncv - beta_true[1:]))
-#
-#fig = plt.figure()
-#plt.boxplot([err_ncv, err_sbl])
-##plt.boxplot(err_ncv-err_sbl)
-#plt.savefig("bake.pdf")
-#plt.close()
+    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))

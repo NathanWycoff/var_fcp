@@ -21,7 +21,8 @@ P = 100
 #P = 1000
 
 nnz = 10
-reps = 30
+#reps = 30
+reps = 5
 
 err_sbl = np.zeros(reps)*np.nan
 err_ncv = np.zeros(reps)*np.nan
@@ -42,7 +43,7 @@ for rep in tqdm(range(reps)):
     y = X1@beta_true + np.random.normal(scale=sigma2_true,size=N)
     yy = XX1@beta_true + np.random.normal(scale=sigma2_true,size=NN)
 
-    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = False)
+    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = False, novar = False)
     beta_ncv, yy_ncv = pred_ncv(X, y, XX)
     beta_ncv = beta_ncv[1:]
 
