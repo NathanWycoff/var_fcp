@@ -42,7 +42,7 @@ for rep in tqdm(range(reps)):
     y = X1@beta_true + np.random.normal(scale=sigma2_true,size=N)
     yy = XX1@beta_true + np.random.normal(scale=sigma2_true,size=NN)
 
-    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True)
+    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = False)
     beta_ncv, yy_ncv = pred_ncv(X, y, XX)
     beta_ncv = beta_ncv[1:]
 
