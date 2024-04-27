@@ -23,7 +23,7 @@ def variational_cost(X, y, eta, lam, tau, sigma2, v_f, P_FCP):
     t2a = jnp.sum(jnp.square(y-X@eta)) # Expected log-lik pred deviation
     t2b = v_f * jnp.sum(jnp.sum(jnp.square(X), axis = 0) / jnp.square(lam)) # Expected log-lik var term.
     t2 = 1/(2*sigma2)*(t2a+t2b) # Expected negative log lik.
-    t3 = jnp.sum(tau*P_FCP(lam*jnp.abs(eta))) # scaled KS divergence.
+    t3 = jnp.sum(tau*jax.vmap(P_FCP)(lam*jnp.abs(eta))) # scaled KS divergence.
     t4 = jnp.sum(jnp.log(lam))
     return t1 + t2 + t3 + t4
 
@@ -391,31 +391,61 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             lam = lam_a
 
 
+        init_cost = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
         diff = np.inf
         while (it < max_iters) and (diff > block_thresh*sdy):
             it += 1
             eta_last = jnp.copy(eta)
             lam_last = jnp.copy(lam)
             eta, preds = update_eta(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds)
+            new_cost = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+            #variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+            #variational_cost(X_train[-1], y_train[-1], eta_last[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+            print("eta:")
+            print(init_cost-new_cost)
+            if new_cost>init_cost+1e-4:
+                import IPython; IPython.embed()
+            init_cost = new_cost
+
             if not novar:
                 #import IPython; IPython.embed()
                 #sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
                 #np.mean(np.square(y_train[k] - preds[k]))
                 #sigma2_hat = jnp.array([np.sum(np.square(y_train[k] - preds[k])) / (Ns[k]-np.sum(eta[k,:]!=0)-1) for k in range(K)])
                 #sigma2_hat = jnp.array([np.mean(np.square(y_train[k] - preds[k])) for k in range(K)])
+
+                #sigma2_hat = []
+                #for k in range(K):
+                #    ny = jnp.sum(jnp.square(y_train[k]))
+                #    ct = -2 * y_train[k].T @ X_train[k] @ eta[k,:]
+                #    qf1 = eta[k,:].T @ X_train[k].T @ X_train[k] @ eta[k,:]
+                #    qf2 = v_f * jnp.sum(jnp.sum(jnp.square(X_train[k]), axis = 0) / jnp.square(lam[k,:]))
+                #    sigma2_hat.append((ny+ct+qf1+qf2)/N)
+                #sigma2_hat = jnp.array(sigma2_hat)
                 sigma2_hat = []
                 for k in range(K):
-                    ny = jnp.sum(jnp.square(y_train[k]))
-                    ct = -2 * y_train[k].T @ X_train[k] @ eta[k,:]
-                    qf1 = eta[k,:].T @ X_train[k].T @ X_train[k] @ eta[k,:]
+                    qf1 = jnp.sum(jnp.square(y_train[k]-preds[k]))
                     qf2 = v_f * jnp.sum(jnp.sum(jnp.square(X_train[k]), axis = 0) / jnp.square(lam[k,:]))
-                    sigma2_hat.append((ny+ct+qf1+qf2)/N)
+                    sigma2_hat.append((qf1+qf2)/N)
                 sigma2_hat = jnp.array(sigma2_hat)
+
                 #if np.any(~np.isfinite(sigma2_hat)):
                 #    raise Exception("Bad sigma2!")
                 s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
 
+                new_cost = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                print("sigma2:")
+                print(init_cost-new_cost)
+                if new_cost>init_cost+1e-4:
+                    import IPython; IPython.embed()
+                init_cost = new_cost
+
                 lam, lam_it = update_lam(eta, lam, tau, s, max_iters = lam_maxit)
+                print("lam:")
+                print(init_cost-new_cost)
+                if new_cost>init_cost+1e-4:
+                    import IPython; IPython.embed()
+                init_cost = new_cost
                 if lam_it == lam_maxit and verbose:
                     print("Reached max iters on lam update.")
 
@@ -493,7 +523,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         return Q.mean(), yy_hat[-1]
 
 if __name__=='__main__':
-    #np.random.seed(124)
+    np.random.seed(124)
     N = 400
     P = 40
     X = np.random.normal(size=[N,P])
@@ -502,7 +532,7 @@ if __name__=='__main__':
     XX = np.random.normal(size=[N,P])
 
     ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
 
     print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
     print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
