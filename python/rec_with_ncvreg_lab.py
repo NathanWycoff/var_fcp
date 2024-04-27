@@ -22,6 +22,7 @@ from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 ## Us
 def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True):
     #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'
+    A_MCP = 3.
     N,P = X.shape
     X = jnp.array(X)
     y = jnp.array(y)
@@ -261,12 +262,11 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     ## Generate penalty sequence.
     T = 100
     if novar:
-        a = 6.
         MCP_LAMBDA_min = 1e-3*MCP_LAMBDA_max if N>P else 5e-2*MCP_LAMBDA_max
         #print("Small T")
         #T = 4
         MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max), num = T))
-        tau_range = a*np.square(MCP_LAMBDA_range)
+        tau_range = A_MCP*np.square(MCP_LAMBDA_range)
     else:
         lam_maxit = 100
         sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
@@ -377,10 +377,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     for t, tau in enumerate(tqdm(tau_range)):
         tau_effective = tau*jnp.ones(K)
 
-        a = 2*3.
-        lam_a = np.ones([K, P]) * 1/jnp.sqrt(a*tau)
+        lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau)
         if novar:
-            #a = 3.
             lam = lam_a
 
         sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
@@ -480,7 +478,7 @@ if __name__=='__main__':
     XX = np.random.normal(size=[N,P])
 
     ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
 
     print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
     print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
