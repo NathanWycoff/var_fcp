@@ -468,17 +468,17 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     else:
         return Q.mean(), yy_hat[-1]
 
-if __name__=='__main__':
-    #np.random.seed(124)
-    N = 400
-    P = 40
-    X = np.random.normal(size=[N,P])
-    #y = np.random.normal(size=[N])
-    y = X[:,0] + np.random.normal(size=N)
-    XX = np.random.normal(size=[N,P])
-
-    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
-
-    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+#if __name__=='__main__':
+#    #np.random.seed(124)
+#    N = 400
+#    P = 40
+#    X = np.random.normal(size=[N,P])
+#    #y = np.random.normal(size=[N])
+#    y = X[:,0] + np.random.normal(size=N)
+#    XX = np.random.normal(size=[N,P])
+#
+#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
+#
+#    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
