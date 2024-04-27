@@ -18,7 +18,7 @@ from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 
 ################################################################################################
 ## Us
-def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True):
+def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True, novar = False):
     #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False
     N,P = X.shape
     X = jnp.array(X)
@@ -236,19 +236,19 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #block_thresh = 1e-6
     block_thresh = 1e-4
 
-    sigma2_hat = 0.*jnp.array([np.mean(np.square(yk)) for yk in y_train])+1. # Isn't this folded into the tau path?
-    x2 = 0.*jnp.array([jnp.sum(jnp.square(Xk), axis=0) for Xk in X_train])+1. # this is just N when scaled. 
-    s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
+    x2 = jnp.array([jnp.sum(jnp.square(Xk), axis=0) for Xk in X_train]) # this is just N when scaled. 
 
     max_nnz = 40
 
     ## Init params
     eta = jnp.zeros([K,P])
     #lam = jnp.array(1/np.sqrt(s))
+    a = 3.
+    lam = np.ones([K, P])
+    lam, lam_it = update_lam(jnp.zeros([K,P]), lam, tau_effective, s, max_iters = lam_maxit)
 
     etas = np.zeros([T, K, P])*np.nan
     lams = np.zeros([T, K, P])*np.nan
-    sigma2s = np.zeros([T,K])*np.nan
 
     Ns = jnp.array([Xk.shape[0] for Xk in X_train])
     NNs = jnp.array([Xk.shape[0] for Xk in X_test])
@@ -263,26 +263,26 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #t, MCP_LAMBDA = 1, MCP_LAMBDA_range[1]
     for t, MCP_LAMBDA in enumerate(tqdm(MCP_LAMBDA_range)):
         #tau_effective = tau*Ns/Ns[-1]
-        a = 3.
-        lam = np.ones([K, P]) * 1/(a*MCP_LAMBDA)
+        #a = 3.
         tau_effective = jnp.array([a*jnp.square(MCP_LAMBDA) for _ in range(K)])
+
+        sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
+        s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
 
         diff = np.inf
         while (it < max_iters) and (diff > block_thresh*sdy):
             it += 1
             eta_last = jnp.copy(eta)
-            #lam_last = jnp.copy(lam)
+            lam_last = jnp.copy(lam)
             eta, preds = update_eta(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds)
-            #lam, lam_it = update_lam(eta, lam, tau_effective, s, max_iters = lam_maxit)
-            lam_it = 0
+            lam, lam_it = update_lam(eta, lam, tau_effective, s, max_iters = lam_maxit)
             #print(eta)
 
             if lam_it == lam_maxit and verbose:
                 print("Reached max iters on lam update.")
 
-            #diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
-            diff = jnp.max(jnp.abs(eta_last-eta))
-
+            diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
+            #diff = jnp.max(jnp.abs(eta_last-eta))
 
         etas[t,:,:] = eta
         lams[t,:,:] = lam
@@ -326,17 +326,17 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     else:
         return Q.mean(), yy_hat[-1]
 
-#if __name__=='__main__':
-#    #np.random.seed(124)
-#    N = 400
-#    P = 40
-#    X = np.random.normal(size=[N,P])
-#    y = np.random.normal(size=[N])
-#    XX = np.random.normal(size=[N,P])
-#
-#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-#
-#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False)
-#
-#    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+if __name__=='__main__':
+    #np.random.seed(124)
+    N = 400
+    P = 40
+    X = np.random.normal(size=[N,P])
+    y = np.random.normal(size=[N])
+    XX = np.random.normal(size=[N,P])
+
+    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False)
+
+    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
