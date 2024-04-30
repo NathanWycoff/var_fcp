@@ -163,7 +163,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             ols = jnp.mean(X_train[k][:,p] * resid_other)
 
             #eta_new = prox_P(ols*lam[k,p], s[k,p]*jnp.square(lam[k,p])*tau_effective[k])/lam[k,p]
-            eta_new = prox_P(ols*lam[k,p], jnp.square(lam[k,p])*tau_effective[k])/lam[k,p]
+            eta_new = prox_P(ols*lam[k,p], s[k,p]*jnp.square(lam[k,p])*tau_effective[k])/lam[k,p]
             #print("Warning: manual prox")
             #assert penalty=='MCP'
             #eta_new_new = prox_MCP_manual(ols, tau_effective[k], lam[k,p])
@@ -265,14 +265,15 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     max_nnz = 40
 
-    eta = jnp.zeros([K,P])
-    #MCP_LAMBDA_max = 0.5*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
-    MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
-
     ## Generate penalty sequence.
     T = 100
     sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
     s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
+
+    eta = jnp.zeros([K,P])
+    #MCP_LAMBDA_max = 0.5*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
+    MCP_LAMBDA_max = 1/jnp.sqrt(s)[0,0]*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
+
     if novar:
         MCP_LAMBDA_min = 1e-3*MCP_LAMBDA_max if N>P else 5e-2*MCP_LAMBDA_max
         #print("Small T")
@@ -401,11 +402,12 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             new_cost = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
             #variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
             #variational_cost(X_train[-1], y_train[-1], eta_last[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
-            print("eta:")
-            print(init_cost-new_cost)
-            if new_cost>init_cost+1e-4:
-                import IPython; IPython.embed()
-            init_cost = new_cost
+            if not novar:
+                print("eta:")
+                print(init_cost-new_cost)
+                if new_cost>init_cost+1e-4:
+                    import IPython; IPython.embed()
+                init_cost = new_cost
 
             if not novar:
                 #import IPython; IPython.embed()
@@ -433,19 +435,21 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 #    raise Exception("Bad sigma2!")
                 s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
 
-                new_cost = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
-                print("sigma2:")
-                print(init_cost-new_cost)
-                if new_cost>init_cost+1e-4:
-                    import IPython; IPython.embed()
-                init_cost = new_cost
+                if not notvar:
+                    new_cost = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                    print("sigma2:")
+                    print(init_cost-new_cost)
+                    if new_cost>init_cost+1e-4:
+                        import IPython; IPython.embed()
+                    init_cost = new_cost
 
                 lam, lam_it = update_lam(eta, lam, tau, s, max_iters = lam_maxit)
-                print("lam:")
-                print(init_cost-new_cost)
-                if new_cost>init_cost+1e-4:
-                    import IPython; IPython.embed()
-                init_cost = new_cost
+                if not notvar:
+                    print("lam:")
+                    print(init_cost-new_cost)
+                    if new_cost>init_cost+1e-4:
+                        import IPython; IPython.embed()
+                    init_cost = new_cost
                 if lam_it == lam_maxit and verbose:
                     print("Reached max iters on lam update.")
 
@@ -532,7 +536,7 @@ if __name__=='__main__':
     XX = np.random.normal(size=[N,P])
 
     ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
 
     print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
     print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
