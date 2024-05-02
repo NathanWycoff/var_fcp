@@ -15,6 +15,7 @@ import matplotlib
 matplotlib.use('Agg')
 from scipy.optimize import minimize_scalar
 from python.tfp_plus import tri_quant
+from scipy.optimize import minimize_scalar
 
 import numpy as np
 from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
@@ -99,7 +100,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #dP_FCP = jax.vmap(jax.grad(P_FCP))
     dP_FCP = jax.vmap(jax.vmap(jax.grad(P_FCP)))
     #print("auto dP_FCP may be unreliable at 0.")
-    v_f = get_Q(0,1).variance()
+    v_f = get_Q(0,1).variance().astype(np.float64)
 
     def update_sigma2_pre(sigma2_hat, preds, N, eta, lam, v_f, x2, tau):
         for k in range(K):
@@ -306,6 +307,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 print("It's eta!")
                 print(cost_after - cost_before)
                 #import IPython; IPython.embed()
+                break
             
             if not novar:
                 cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
@@ -314,7 +316,16 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 if cost_after > cost_before + 1e-8:
                     print("It's lam!")
                     print(cost_after - cost_before)
+                    it = 1e12
                     #import IPython; IPython.embed()
+                    break
+                    #def sc(x, X, y, eta, lam, tau, sigma2, v_f, P_FCP):
+                    #    #lam = lam.at[0].set(x)
+                    #    l = lam.at[0].set(x)
+                    #    return variational_cost(X, y, eta, l, tau, sigma2, v_f, P_FCP)
+                    #minimize_scalar(sc, args=(X_train[-1], y_train[-1],  eta[-1,:], lam[-1,:], tau_effective,  sigma2_hat,  v_f,  P_FCP))
+                            
+
                 if lam_it == lam_maxit and verbose:
                     print("Reached max iters on lam update.")
                 cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
@@ -324,6 +335,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 if cost_after > cost_before + 1e-8:
                     print("It's siga2!")
                     #import IPython; IPython.embed()
+                    break
                     print(cost_after - cost_before)
 
             diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
