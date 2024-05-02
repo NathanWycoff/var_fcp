@@ -23,11 +23,10 @@ from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 
 def variational_cost(X, y, eta, lam, tau, sigma2, v_f, P_FCP):
     N = X.shape[0]
-    t1 = N/2*jnp.log(sigma2) # Loglik entropy term
+    t1 = N/2.*jnp.log(sigma2) # Loglik entropy term
     t2a = jnp.sum(jnp.square(y-X@eta)) # Expected log-lik pred deviation
     t2b = v_f * jnp.sum(jnp.sum(jnp.square(X), axis = 0) / jnp.square(lam)) # Expected log-lik var term.
-    t2 = 1/(2*sigma2)*(t2a+t2b) # Expected negative log lik.
-    #t3 = jnp.sum(tau/sigma2*jax.vmap(P_FCP)(lam*jnp.abs(eta))) # scaled KS divergence.
+    t2 = 1./(2.*sigma2)*(t2a+t2b) # Expected negative log lik.
     t3 = jnp.sum(tau/sigma2*jax.vmap(P_FCP)(lam*eta)) # scaled KS divergence.
     t4 = jnp.sum(jnp.log(lam))
     return t1 + t2 + t3 + t4
@@ -89,6 +88,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             return ret
 
         P_FCP = lambda x: 0.5*jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
+        #dP_FCP = jax.vmap(jax.vmap(lambda x: 0.5*jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.sign(x)-2*x, lambda: 0.)))
         #P_FCP = lambda x: jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.abs(x)-jnp.square(x), lambda: 1.)
         #dP_FCP = lambda x: jax.lax.cond(jnp.abs(x)<1, lambda: 2*jnp.sign(x)-2*x, lambda: 0.)
 
@@ -102,12 +102,12 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #print("auto dP_FCP may be unreliable at 0.")
     v_f = get_Q(0,1).variance().astype(np.float64)
 
-    def update_sigma2_pre(sigma2_hat, preds, N, eta, lam, v_f, x2, tau):
+    def update_sigma2_pre(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau):
         for k in range(K):
-            t1 = jnp.sum(jnp.square(y - preds[k]))
+            t1 = jnp.sum(jnp.square(y_train[k] - preds[k]))
             t2 = v_f * jnp.sum(x2[k,:]/jnp.square(lam[k,:]))
             t3 = jnp.sum(2*tau*jax.vmap(P_FCP)(lam[k,:]*eta[k,:]))
-            sigma2_hat = sigma2_hat.at[k].set((t1+t2+t3)/N)
+            sigma2_hat = sigma2_hat.at[k].set((t1+t2+t3)/Ns[k])
         return sigma2_hat
 
     ## Lambda update functions.
@@ -122,34 +122,36 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         return jnp.logical_and(diff > thresh, it<max_iters)
 
     def update_lam_pre(eta, lam, tau_effective, s, sigma2_wide, thresh = 1e-6, max_iters = 100):
-        it = 0
+        #it = 0
         #thresh = 1e-6
         #thresh = 1e-8
         thresh = 1e-12
-
         diff = np.inf
+
         val = (eta, lam, tau_effective, s, sigma2_wide, diff, thresh, 0, max_iters)
         eta, lam, tau_effective, s, sigma2_wide, diff, thresh, it, max_iters = jax.lax.while_loop(cond_fun_lam, body_fun_lam, val)
         return lam, it
 
+    #def lam_cost()
+
     ## eta update functions
     def body_fun_eta(p, val):
-        eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train = val
+        eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2 = val
         for k in range(K):
             pred_other = preds[k] - eta[k,p] * X_train[k][:,p]
             resid_other = y_train[k] - pred_other
             ols = jnp.mean(X_train[k][:,p] * resid_other)
 
-            eta_new = prox_P(ols*lam[k,p], jnp.square(lam[k,p])*tau_effective[k])/lam[k,p]
+            eta_new = prox_P(ols*lam[k,p], jnp.square(lam[k,p])*tau_effective[k]/x2[k,p])/lam[k,p]
             eta = eta.at[k,p].set(eta_new)
 
             preds[k] = pred_other + eta[k,p] * X_train[k][:,p]
 
-        return eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train
+        return eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2
 
-    def update_eta_pre(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds):
-        val = (eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train)
-        eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train = jax.lax.fori_loop(0, P, body_fun_eta, val)
+    def update_eta_pre(eta, lam, X_train, y_train, x2, sigma2_hat, tau_effective, s, preds):
+        val = (eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2)
+        eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2 = jax.lax.fori_loop(0, P, body_fun_eta, val)
         return eta, preds
     ########################################
 
@@ -225,6 +227,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     max_nnz = 40
 
     eta = jnp.zeros([K,P])
+    print(" Update because of X2 multiply.")
     MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
 
     ## Generate penalty sequence.
@@ -281,6 +284,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
     sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
 
+    print("Removing first tau for fun.")
+    #tau_range
+
     it = 0
     t, tau = 0, tau_range[0]
     for t, tau in enumerate(tqdm(tau_range)):
@@ -301,13 +307,11 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             lam_last = jnp.copy(lam)
             
             cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
-            eta, preds = update_eta(eta, lam, X_train, y_train, sigma2_hat, tau_effective, s, preds)
+            eta, preds = update_eta(eta, lam, X_train, y_train, x2, sigma2_hat, tau_effective, s, preds)
             cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
             if cost_after > cost_before + 1e-8:
                 print("It's eta!")
                 print(cost_after - cost_before)
-                #import IPython; IPython.embed()
-                break
             
             if not novar:
                 cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
@@ -317,8 +321,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                     print("It's lam!")
                     print(cost_after - cost_before)
                     it = 1e12
-                    #import IPython; IPython.embed()
                     break
+                    #import IPython; IPython.embed()
                     #def sc(x, X, y, eta, lam, tau, sigma2, v_f, P_FCP):
                     #    #lam = lam.at[0].set(x)
                     #    l = lam.at[0].set(x)
@@ -329,13 +333,11 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 if lam_it == lam_maxit and verbose:
                     print("Reached max iters on lam update.")
                 cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
-                sigma2_hat = update_sigma2(sigma2_hat, preds, N, eta, lam, v_f, x2, tau)
+                sigma2_hat = update_sigma2(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau)
                 sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
                 cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
                 if cost_after > cost_before + 1e-8:
                     print("It's siga2!")
-                    #import IPython; IPython.embed()
-                    break
                     print(cost_after - cost_before)
 
             diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])

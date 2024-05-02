@@ -4,7 +4,7 @@
 
 import numpy as np
 #from python.rec_with_ncvreg_lab.py import pred_sbl
-exec(open('python/rec_with_ncvreg_lab.py').read())
+exec(open('python/valencia.py').read())
 from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -21,8 +21,8 @@ P = 100
 #P = 1000
 
 nnz = 10
-reps = 30
-#reps = 5
+#reps = 30
+reps = 2
 
 err_sbl = np.zeros(reps)*np.nan
 err_ncv = np.zeros(reps)*np.nan
