@@ -31,6 +31,12 @@ def variational_cost(X, y, eta, lam, tau, sigma2, v_f, P_FCP):
     t4 = jnp.sum(jnp.log(lam))
     return t1 + t2 + t3 + t4
 
+def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
+    t1 = v_f * jnp.sum(jnp.square(X), axis = 0) / jnp.square(lam)/(2.*sigma2) # Expected log-lik var term.
+    t2 = tau/sigma2*jax.vmap(P_FCP)(lam*eta) # scaled KS divergence.
+    t3 = jnp.log(lam)
+    return t1 + t2 + t3
+
 ################################################################################################
 ## Us
 def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True):
@@ -98,7 +104,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     # Extract other features of penalty.
     #dP_FCP = jax.vmap(jax.grad(P_FCP))
-    dP_FCP = jax.vmap(jax.vmap(jax.grad(P_FCP)))
+    dP_FCP1 = jax.grad(P_FCP)
+    dP_FCP = jax.vmap(jax.vmap(dP_FCP1))
     #print("auto dP_FCP may be unreliable at 0.")
     v_f = get_Q(0,1).variance().astype(np.float64)
 
@@ -315,11 +322,62 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             
             if not novar:
                 cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                #lc_before =  lam_costs(lam[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP)
                 lam, lam_it = update_lam(eta, lam, tau, s, sigma2_wide, max_iters = lam_maxit)
+                #lc_after =  lam_costs(lam[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP)
                 cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+
+                ###
+
+                #def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
+                #    print(v_f)
+                #    a = v_f * jnp.sum(jnp.square(X), axis = 0) / sigma2
+                #    print(a)
+                #    t1 = a / (2*jnp.square(lam))
+                #    #t1 = v_f * jnp.sum(jnp.square(X), axis = 0) / jnp.square(lam)/(2.*sigma2) # Expected log-lik var term.
+                #    #t2 = tau/sigma2*jax.vmap(P_FCP)(lam*eta) # scaled KS divergence.
+                #    t2 = tau/sigma2*P_FCP(lam*eta) # scaled KS divergence.
+                #    t3 = jnp.log(lam)
+                #    return t1 + t3
+                #    #return t1 + t2 + t3
+
+                ##def cost1d(x):
+                ##    lam1 = lam.at[0,0].set(x)
+                ##    ret =  lam_costs(lam1[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP, tau)
+                ##    return ret[0]
+                #def cost1d(x):
+                #    ret = lam_costs(x, eta[0,0], X_train[0][:,:1], sigma2_hat[0], v_f, P_FCP, tau)[0]
+                #    return ret
+
+                #lp = np.linspace(0.8,1)
+                #yp = [cost1d(l) for l in lp]
+
+                #s2 = sigma2_hat[0]
+                #ss = s[0,0]
+                #ee = eta[0,0]
+                #ll = 1.
+                #tt = 1.5
+                #def body_fun_lam(ll):
+                #    new_ll = jnp.power(1/ss*v_f/(ee*tt/ss*dP_FCP1(ll*ee)+1/ll), 1./3)
+                #    return new_ll
+                #for i in range(10):
+                #    ll = body_fun_lam(ll)
+                #    print(ll)
+
+                #fig = plt.figure()
+                #plt.plot(lp, yp)
+                #ll, ul = plt.gca().get_ylim()
+                ##plt.vlines(lam[0,0], ll, ul)
+                #a = v_f * jnp.sum(jnp.square(X_train[0]), axis = 0)[0] / sigma2_hat[0]
+                #plt.vlines(jnp.sqrt(a), ll, ul)
+                #plt.savefig("temp.pdf")
+                #plt.close()
+                ###
+
                 if cost_after > cost_before + 1e-8:
                     print("It's lam!")
                     print(cost_after - cost_before)
+                    print(it)
                     it = 1e12
                     break
                     #import IPython; IPython.embed()
@@ -335,6 +393,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
                 sigma2_hat = update_sigma2(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau)
                 sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
+                s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
                 cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
                 if cost_after > cost_before + 1e-8:
                     print("It's siga2!")

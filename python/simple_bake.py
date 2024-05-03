@@ -22,7 +22,7 @@ P = 100
 
 nnz = 10
 #reps = 30
-reps = 2
+reps = 1
 
 err_sbl = np.zeros(reps)*np.nan
 err_ncv = np.zeros(reps)*np.nan
