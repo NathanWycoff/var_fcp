@@ -234,8 +234,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     max_nnz = 40
 
     eta = jnp.zeros([K,P])
-    print(" Update because of X2 multiply.")
-    MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
+    #print(" Update because of X2 multiply.")
+    #MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
+    MCP_LAMBDA_max = jnp.sqrt(jnp.max(x2))*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
 
     ## Generate penalty sequence.
     T = 100
@@ -275,6 +276,11 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         plt.close()
 
         lam = jnp.ones([K,P]) * lam_eta0
+
+        ss = jnp.max(jnp.square(lam)*tau_max / jnp.max(x2))
+        if ss < 1:
+            for i in range(10):
+                print("Hey, the s is <1; initialization strategy may not work. ")
 
     ## Init params
 
