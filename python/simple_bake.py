@@ -20,6 +20,7 @@ P = 100
 #N = 10000
 #P = 1000
 
+#nnz = 10
 nnz = 10
 #reps = 30
 reps = 1
@@ -46,7 +47,7 @@ for rep in tqdm(range(reps)):
     yy = XX1@beta_true + np.random.normal(scale=sigma2_true,size=NN)
 
     #beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = False, novar = False)
-    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = False, novar = False, penalty = 'MCP')
+    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = True, novar = False, penalty = 'MCP')
     beta_ncv, yy_ncv = pred_ncv(X, y, XX)
     beta_ncv = beta_ncv[1:]
 

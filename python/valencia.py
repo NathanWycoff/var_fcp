@@ -238,6 +238,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
     MCP_LAMBDA_max = jnp.sqrt(jnp.max(x2))*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
 
+    print("At least one reason novar doesn't work is because of the MCP_lam_max vandalism.")
+    print("Also: can we purposefully init ourselves in the regime where we are not hard threshing?")
     ## Generate penalty sequence.
     T = 100
     if novar:
@@ -473,17 +475,17 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     else:
         return Q.mean(), yy_hat[-1]
 
-if __name__=='__main__':
-    np.random.seed(124)
-    N = 400
-    P = 40
-    X = np.random.normal(size=[N,P])
-    y = X[:,0] + np.random.normal(size=N)
-    XX = np.random.normal(size=[N,P])
-
-    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
-    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
-
-    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+#if __name__=='__main__':
+#    np.random.seed(124)
+#    N = 400
+#    P = 40
+#    X = np.random.normal(size=[N,P])
+#    y = X[:,0] + np.random.normal(size=N)
+#    XX = np.random.normal(size=[N,P])
+#
+#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+#    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
+#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
+#
+#    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
