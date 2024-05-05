@@ -40,7 +40,8 @@ def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
 ################################################################################################
 ## Us
 def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True):
-    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'
+    print("default params.")
+    penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'
     A_MCP = 3.
     N,P = X.shape
     X = jnp.array(X)
@@ -87,7 +88,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             ret3 = jax.lax.switch(ind, branches)
 
             #ret2 = jax.lax.cond(x<1., lambda: 0., lambda: x)
-            ret2 = jax.lax.cond(x<jnp.sqrt(s), lambda: 0., lambda: x)
+            ret2 = jax.lax.cond(jnp.abs(x)<jnp.sqrt(s), lambda: 0., lambda: x)
 
             ret = jax.lax.cond(s<1., lambda: ret3, lambda: ret2)
 
@@ -141,6 +142,10 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     #def lam_cost()
 
+    #x = ols*lam[k,p]
+    #s = jnp.square(lam[k,p])*tau_effective[k]/x2[k,p]
+    #prox_P(x, s)
+
     ## eta update functions
     def body_fun_eta(p, val):
         eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2 = val
@@ -148,6 +153,16 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             pred_other = preds[k] - eta[k,p] * X_train[k][:,p]
             resid_other = y_train[k] - pred_other
             ols = jnp.mean(X_train[k][:,p] * resid_other)
+            print("OLS:")
+            print(ols)
+
+            if p == 0:
+                print("lam:")
+                print(lam)
+                print("tau:")
+                print(tau_effective)
+                print("x2:")
+                print(x2)
 
             eta_new = prox_P(ols*lam[k,p], jnp.square(lam[k,p])*tau_effective[k]/x2[k,p])/lam[k,p]
             eta = eta.at[k,p].set(eta_new)
@@ -158,7 +173,10 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     def update_eta_pre(eta, lam, X_train, y_train, x2, sigma2_hat, tau_effective, s, preds):
         val = (eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2)
-        eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2 = jax.lax.fori_loop(0, P, body_fun_eta, val)
+        #eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2 = jax.lax.fori_loop(0, P, body_fun_eta, val)
+        for p in range(P):
+            val = body_fun_eta(p,val)
+        eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2 = val
         return eta, preds
     ########################################
 
@@ -226,7 +244,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     update_lam = jax.jit(update_lam_pre)
     update_sigma2 = jax.jit(update_sigma2_pre)
 
-    max_iters = 10000
+    #max_iters = 10000
+    max_iters = 100
     block_thresh = 1e-4
 
     x2 = jnp.array([jnp.sum(jnp.square(Xk), axis=0) for Xk in X_train]) # this is just N when scaled. 
@@ -320,14 +339,32 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             it += 1
             eta_last = jnp.copy(eta)
             lam_last = jnp.copy(lam)
-            
+            preds_last = [jnp.copy(p) for p in preds]
+
+            #eta = jnp.copy(eta_last )
+            #lam = jnp.copy(lam_last )
+            #preds = [jnp.copy(p) for p in preds_last ]
+            #tau_effective = tau_range[t_broke]*jnp.ones(K)
+
+
             cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
-            eta, preds = update_eta(eta, lam, X_train, y_train, x2, sigma2_hat, tau_effective, s, preds)
+            print("Before:")
+            print(eta)
+            print(preds)
+            eta, preds = update_eta_pre(eta, lam, X_train, y_train, x2, sigma2_hat, tau_effective, s, preds)
+            print("Not Jitting")
+            print("After:")
+            print(eta)
+            print(preds)
             cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
             if cost_after > cost_before + 1e-8:
                 print("It's eta!")
                 print(cost_after - cost_before)
+                t_broke = t
+                it = 1e12
+                break
             
+            print("yabadaba")
             if not novar:
                 cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
                 #lc_before =  lam_costs(lam[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP)
@@ -335,66 +372,12 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 #lc_after =  lam_costs(lam[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP)
                 cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
 
-                ###
-
-                #def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
-                #    print(v_f)
-                #    a = v_f * jnp.sum(jnp.square(X), axis = 0) / sigma2
-                #    print(a)
-                #    t1 = a / (2*jnp.square(lam))
-                #    #t1 = v_f * jnp.sum(jnp.square(X), axis = 0) / jnp.square(lam)/(2.*sigma2) # Expected log-lik var term.
-                #    #t2 = tau/sigma2*jax.vmap(P_FCP)(lam*eta) # scaled KS divergence.
-                #    t2 = tau/sigma2*P_FCP(lam*eta) # scaled KS divergence.
-                #    t3 = jnp.log(lam)
-                #    return t1 + t3
-                #    #return t1 + t2 + t3
-
-                ##def cost1d(x):
-                ##    lam1 = lam.at[0,0].set(x)
-                ##    ret =  lam_costs(lam1[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP, tau)
-                ##    return ret[0]
-                #def cost1d(x):
-                #    ret = lam_costs(x, eta[0,0], X_train[0][:,:1], sigma2_hat[0], v_f, P_FCP, tau)[0]
-                #    return ret
-
-                #lp = np.linspace(0.8,1)
-                #yp = [cost1d(l) for l in lp]
-
-                #s2 = sigma2_hat[0]
-                #ss = s[0,0]
-                #ee = eta[0,0]
-                #ll = 1.
-                #tt = 1.5
-                #def body_fun_lam(ll):
-                #    new_ll = jnp.power(1/ss*v_f/(ee*tt/ss*dP_FCP1(ll*ee)+1/ll), 1./3)
-                #    return new_ll
-                #for i in range(10):
-                #    ll = body_fun_lam(ll)
-                #    print(ll)
-
-                #fig = plt.figure()
-                #plt.plot(lp, yp)
-                #ll, ul = plt.gca().get_ylim()
-                ##plt.vlines(lam[0,0], ll, ul)
-                #a = v_f * jnp.sum(jnp.square(X_train[0]), axis = 0)[0] / sigma2_hat[0]
-                #plt.vlines(jnp.sqrt(a), ll, ul)
-                #plt.savefig("temp.pdf")
-                #plt.close()
-                ###
-
                 if cost_after > cost_before + 1e-8:
                     print("It's lam!")
                     print(cost_after - cost_before)
                     print(it)
                     it = 1e12
                     break
-                    #import IPython; IPython.embed()
-                    #def sc(x, X, y, eta, lam, tau, sigma2, v_f, P_FCP):
-                    #    #lam = lam.at[0].set(x)
-                    #    l = lam.at[0].set(x)
-                    #    return variational_cost(X, y, eta, l, tau, sigma2, v_f, P_FCP)
-                    #minimize_scalar(sc, args=(X_train[-1], y_train[-1],  eta[-1,:], lam[-1,:], tau_effective,  sigma2_hat,  v_f,  P_FCP))
-                            
 
                 if lam_it == lam_maxit and verbose:
                     print("Reached max iters on lam update.")
@@ -475,17 +458,19 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     else:
         return Q.mean(), yy_hat[-1]
 
-#if __name__=='__main__':
-#    np.random.seed(124)
-#    N = 400
-#    P = 40
-#    X = np.random.normal(size=[N,P])
-#    y = X[:,0] + np.random.normal(size=N)
-#    XX = np.random.normal(size=[N,P])
-#
-#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-#    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
-#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
-#
-#    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+if __name__=='__main__':
+    np.random.seed(124)
+    N = 40
+    P = 4
+    X = np.random.normal(size=[N,P])
+    #y = X[:,0] + np.random.normal(size=N) + 50
+    #y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
+    y = -X[:,0] + np.random.normal(size=N) + 50
+    XX = np.random.normal(size=[N,P])
+
+    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
+
+    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))

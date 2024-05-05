@@ -14,18 +14,18 @@ import matplotlib.pyplot as plt
 
 np.random.seed(123)
 
-N = 100
+N = 40
 NN = 1000
-P = 100
+P = 4
 #N = 10000
 #P = 1000
 
 #nnz = 10
-nnz = 10
+nnz = 1
 #reps = 30
 reps = 1
 
-err_sbl = np.zeros(reps)*np.nan
+rr_sbl = np.zeros(reps)*np.nan
 err_ncv = np.zeros(reps)*np.nan
 for rep in tqdm(range(reps)):
     beta_nz = np.random.normal(size=nnz)
@@ -59,3 +59,6 @@ plt.boxplot([err_ncv, err_sbl])
 #plt.boxplot(err_ncv-err_sbl)
 plt.savefig("bake.pdf")
 plt.close()
+
+print(err_ncv)
+print(err_sbl)
