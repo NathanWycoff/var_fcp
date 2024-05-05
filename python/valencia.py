@@ -39,9 +39,9 @@ def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
 
 ################################################################################################
 ## Us
-def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True):
+def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = True):
     #print("default params.")
-    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'
+    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'; cost_checks = True
     A_MCP = 3.
     N,P = X.shape
     X = jnp.array(X)
@@ -337,10 +337,12 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             #tau_effective = tau_range[t_broke]*jnp.ones(K)
 
 
-            cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+            if cost_checks:
+                cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
             eta, preds = update_eta(eta, lam, X_train, y_train, x2, sigma2_hat, tau_effective, s, preds)
-            cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
-            if cost_after > cost_before + 1e-8:
+            if cost_checks:
+                cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+            if cost_checks and cost_after > cost_before + 1e-8:
                 print("It's eta!")
                 print(cost_after - cost_before)
                 t_broke = t
@@ -348,13 +350,15 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 break
             
             if not novar:
-                cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                if cost_checks:
+                    cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
                 #lc_before =  lam_costs(lam[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP)
                 lam, lam_it = update_lam(eta, lam, tau, s, sigma2_wide, max_iters = lam_maxit)
                 #lc_after =  lam_costs(lam[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP)
-                cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                if cost_checks:
+                    cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
 
-                if cost_after > cost_before + 1e-8:
+                if cost_checks and cost_after > cost_before + 1e-8:
                     print("It's lam!")
                     print(cost_after - cost_before)
                     print(it)
@@ -363,12 +367,14 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
                 if lam_it == lam_maxit and verbose:
                     print("Reached max iters on lam update.")
-                cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                if cost_checks:
+                    cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
                 sigma2_hat = update_sigma2(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau)
                 sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
                 s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
-                cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
-                if cost_after > cost_before + 1e-8:
+                if cost_checks:
+                    cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                if cost_checks and cost_after > cost_before + 1e-8:
                     print("It's siga2!")
                     print(cost_after - cost_before)
 
@@ -447,7 +453,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 #    X = np.random.normal(size=[N,P])
 #    #y = X[:,0] + np.random.normal(size=N) + 50
 #    #y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
-#    y = -X[:,0] + np.random.normal(size=N) + 50
+#    y = -0.03*X[:,0] + np.random.normal(size=N) + 50
 #    XX = np.random.normal(size=[N,P])
 #
 #    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
