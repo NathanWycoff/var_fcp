@@ -250,7 +250,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
 
     print("At least one reason novar doesn't work is because of the MCP_lam_max vandalism.")
-    print("Also: can we purposefully init ourselves in the regime where we are not hard threshing?")
     ## Generate penalty sequence.
     T = 100
     if novar:

@@ -14,14 +14,14 @@ import matplotlib.pyplot as plt
 
 np.random.seed(123)
 
-N = 40
+N = 100
 NN = 1000
-P = 4
+P = 100
 #N = 10000
 #P = 1000
 
-#nnz = 10
-nnz = 1
+nnz = 10
+#nnz = 1
 reps = 30
 #reps = 1
 
@@ -55,8 +55,8 @@ for rep in tqdm(range(reps)):
     err_ncv[rep] = np.mean(np.square(beta_ncv - beta_true[1:]))
 
 fig = plt.figure()
-#plt.boxplot([err_ncv, err_sbl])
-plt.boxplot(err_ncv-err_sbl)
+plt.boxplot([err_ncv, err_sbl])
+#plt.boxplot(err_ncv-err_sbl)
 plt.savefig("bake.pdf")
 plt.close()
 
