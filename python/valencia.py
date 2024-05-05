@@ -43,6 +43,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #print("default params.")
     #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'; cost_checks = True
     A_MCP = 3.
+    lam_maxit = 100
     N,P = X.shape
     X = jnp.array(X)
     y = jnp.array(y)
@@ -245,7 +246,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     eta = jnp.zeros([K,P])
     #print(" Update because of X2 multiply.")
     #MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
-    MCP_LAMBDA_max = jnp.sqrt(jnp.max(x2))*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
+    #MCP_LAMBDA_max = jnp.sqrt(jnp.max(x2))*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
+    MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
 
     print("At least one reason novar doesn't work is because of the MCP_lam_max vandalism.")
     print("Also: can we purposefully init ourselves in the regime where we are not hard threshing?")
@@ -258,40 +260,59 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max), num = T))
         tau_range = A_MCP*np.square(MCP_LAMBDA_range)
     else:
-        lam_maxit = 100
         sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
         s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
         sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
 
+        ### Get tau_max if s > 1:
+        xmax = np.max(x2)
         lam_eta0 = jnp.sqrt(v_f/s[0,0])
-        def rangefind(tau):
-            is_hard = jnp.square(lam_eta0)*tau > 1.
-            big_M = 1e4
-            ret = np.square(jnp.sqrt(tau) - MCP_LAMBDA_max)
-            return ret + big_M*(1-is_hard)
 
-        opt = minimize_scalar(rangefind)
-        tau_max = opt.x * (1+1e-1)
+        sbig = MCP_LAMBDA_max > 1/lam_eta0
+        if sbig:
+            tau_max = xmax * jnp.square(MCP_LAMBDA_max)
+        else:
+            tau_max = xmax * jnp.abs(MCP_LAMBDA_max) / lam_eta0
+        tau_max *= (1+1e-1)
+
+        #def rangefind(tau):
+        #    is_hard = jnp.square(lam_eta0)*tau > 1.
+        #    big_M = 1e4
+        #    ret = np.square(jnp.sqrt(tau/xmax) - MCP_LAMBDA_max)
+        #    return ret + big_M*(1-is_hard)
+
+        #opt = minimize_scalar(rangefind)
+        #tau_max = opt.x * (1+1e-1)
+
         tau_min = 1e-3*tau_max if N>P else 5e-2*tau_max
         tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
 
-        fig = plt.figure()
-        tt = np.logspace(-4,2,num=10000)
-        ee = [rangefind(t) for t in tt]
-        plt.plot(tt, ee)
-        plt.xscale('log')
-        plt.yscale('log')
-        ll,ul = plt.gca().get_ylim()
-        plt.vlines(tau_max, ll, ul)
-        plt.savefig("temp.pdf")
-        plt.close()
+        #fig = plt.figure()
+        #tt = np.logspace(-4,2,num=10000)
+        #ee = [rangefind(t) for t in tt]
+        #plt.plot(tt, ee)
+        #plt.xscale('log')
+        #plt.yscale('log')
+        #ll,ul = plt.gca().get_ylim()
+        #plt.vlines(tau_max, ll, ul)
+        #plt.savefig("temp.pdf")
+        #plt.close()
+
+        #lam_eta0 = jnp.sqrt(v_f/s[0,0])
+        #xmax = np.max(x2)
+        #def rangefind_sgt1(tau):
+        #    is_hard = jnp.square(lam_eta0)*tau > 1.
+        #    big_M = 1e4
+        #    ret = np.square(jnp.sqrt(tau/xmax) - MCP_LAMBDA_max)
+        #    return ret + big_M*(1-is_hard)
+
 
         lam = jnp.ones([K,P]) * lam_eta0
 
-        ss = jnp.max(jnp.square(lam)*tau_max / jnp.max(x2))
-        if ss < 1:
-            for i in range(10):
-                print("Hey, the s is <1; initialization strategy may not work. ")
+        #ss = jnp.max(jnp.square(lam)*tau_max / jnp.max(x2))
+        #if ss < 1:
+        #    for i in range(10):
+        #        print("Hey, the s is <1; initialization strategy may not work. ")
 
     ## Init params
 
@@ -458,7 +479,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 #
 #    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
 #    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
-#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False)
+#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = False)
 #
 #    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
 #    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))

@@ -55,8 +55,8 @@ for rep in tqdm(range(reps)):
     err_ncv[rep] = np.mean(np.square(beta_ncv - beta_true[1:]))
 
 fig = plt.figure()
-plt.boxplot([err_ncv, err_sbl])
-#plt.boxplot(err_ncv-err_sbl)
+#plt.boxplot([err_ncv, err_sbl])
+plt.boxplot(err_ncv-err_sbl)
 plt.savefig("bake.pdf")
 plt.close()
 
