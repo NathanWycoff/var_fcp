@@ -25,7 +25,7 @@ nnz = 1
 #reps = 30
 reps = 1
 
-rr_sbl = np.zeros(reps)*np.nan
+err_sbl = np.zeros(reps)*np.nan
 err_ncv = np.zeros(reps)*np.nan
 for rep in tqdm(range(reps)):
     beta_nz = np.random.normal(size=nnz)
