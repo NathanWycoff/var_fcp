@@ -40,7 +40,7 @@ def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
 ################################################################################################
 ## Us
 def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = True, max_nnz = 40):
-    print("default params.")
+    #print("default params.")
     #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'; cost_checks = True; max_nnz = 40
     #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = True; novar = False; plotname = 'traj.pdf'; cost_checks = True
     A_MCP = 3.
@@ -126,7 +126,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             t3 = jnp.sum(2*tau*jax.vmap(P_FCP)(lam[k,:]*eta[k,:]))
             sigma2_hat = sigma2_hat.at[k].set((t1+t2+t3)/(Ns[k]+P-nnz[k]))
         return sigma2_hat
-
 
     ## Lambda update functions.
     def body_fun_lam(val):
@@ -268,49 +267,53 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max), num = T))
         tau_range = A_MCP*np.square(MCP_LAMBDA_range)
     else:
-        ## Get init sigma2/lam; (i.e. optimal if eta=0).
-        lam = jnp.ones([K,P])
-        #sigma2_hat = jnp.ones([K]) * 0.12308
-        sigma2_hat = jnp.ones([K]) 
-        #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
-        sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P])
-        s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
-        varinit_iters = 10000
-        varinit_iters = 100
-        init_thresh = 1e-8
-        diff = np.inf
-        vi = 0
-        costs = np.repeat(np.nan,varinit_iters)
-        while vi < varinit_iters and diff > init_thresh:
-            costs[vi] = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], 0., sigma2_hat[-1], v_f, P_FCP)
+        ### Get init sigma2/lam; (i.e. optimal if eta=0).
+        #lam = jnp.ones([K,P])
+        ##sigma2_hat = jnp.ones([K]) * 0.12308
+        #sigma2_hat = jnp.ones([K]) 
+        ##sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
+        #sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P])
+        #s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
+        #varinit_iters = 10000
+        #varinit_iters = 100
+        #init_thresh = 1e-8
+        #diff = np.inf
+        #vi = 0
+        #costs = np.repeat(np.nan,varinit_iters)
+        #while vi < varinit_iters and diff > init_thresh:
+        #    costs[vi] = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], 0., sigma2_hat[-1], v_f, P_FCP)
 
-            vi += 1
-            #print(variational_cost(X_train[0], y_train[0], jnp.zeros([P]), lam[-1,:], 1., sigma2_hat, v_f, P_FCP))
-            lam_last = jnp.copy(lam)
-            sigma2_last = jnp.copy(sigma2_hat)
+        #    vi += 1
+        #    #print(variational_cost(X_train[0], y_train[0], jnp.zeros([P]), lam[-1,:], 1., sigma2_hat, v_f, P_FCP))
+        #    lam_last = jnp.copy(lam)
+        #    sigma2_last = jnp.copy(sigma2_hat)
 
-            #lam = jnp.sqrt(v_f * x2/sigma2_hat[:,np.newaxis])
-            #sigma2_hat = (np.array([np.sum(np.square(yk))for yk in y_train]) + v_f * jnp.sum(x2/jnp.square(lam), axis = 1)) / N
-            lam, lam_it = update_lam(jnp.zeros([K,P]), lam, 0., s, sigma2_wide, max_iters = lam_maxit)
-            sigma2_hat = update_sigma2(sigma2_hat, y_train, preds, Ns, jnp.zeros([K,P]), lam, v_f, x2, 0.)
-            #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
-            sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P])
-            s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
+        #    #lam = jnp.sqrt(v_f * x2/sigma2_hat[:,np.newaxis])
+        #    #sigma2_hat = (np.array([np.sum(np.square(yk))for yk in y_train]) + v_f * jnp.sum(x2/jnp.square(lam), axis = 1)) / N
+        #    lam, lam_it = update_lam(jnp.zeros([K,P]), lam, 0., s, sigma2_wide, max_iters = lam_maxit)
+        #    sigma2_hat = update_sigma2(sigma2_hat, y_train, preds, Ns, jnp.zeros([K,P]), lam, v_f, x2, 0.)
+        #    #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
+        #    sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P])
+        #    s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
 
-            diff = max([jnp.max(jnp.abs(sigma2_hat - sigma2_last)), jnp.max(jnp.abs(lam_last-lam))])
-            print(diff)
-            print(lam)
-            print(sigma2_hat)
+        #    diff = max([jnp.max(jnp.abs(sigma2_hat - sigma2_last)), jnp.max(jnp.abs(lam_last-lam))])
+        #    print(diff)
+        #    print(lam)
+        #    print(sigma2_hat)
+        #if vi==varinit_iters:
+        #    print("Warning: nonconvergence in initialization.")
+        #    import IPython; IPython.embed()
 
         ## Closed form optim
-        ynorm2 = np.sum(np.square(y_train))
-        lam_opt = jnp.sqrt(N*v_f*x2/ynorm2)
-        sigma2_opt = ynorm2/N
-        variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam_opt[-1,:], 0., sigma2_opt, v_f, P_FCP)
+        ynorm2 = np.array([np.sum(np.square(yt)) for yt in y_train])
+        #lam_opt = jnp.sqrt(N*v_f*x2/ynorm2)
+        lam = jnp.sqrt(Ns[:,np.newaxis]*v_f*x2/ynorm2[:,np.newaxis])*jnp.ones([K,P])
+        #sigma2_opt = ynorm2/N
+        sigma2_hat = ynorm2/Ns
+        sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P])
+        s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
+        #variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam_opt[-1,:], 0., sigma2_opt, v_f, P_FCP)
 
-        if vi==varinit_iters:
-            print("Warning: nonconvergence in initialization.")
-            import IPython; IPython.embed()
 
         ### Get tau_max if s > 1:
         xmax = np.max(x2[-1,:])
@@ -388,12 +391,13 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 if lam_it == lam_maxit and verbose:
                     print("Reached max iters on lam update.")
                 if cost_checks:
-                    cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                    nnz = jnp.sum(eta!=0, axis = 1)
+                    cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz)/2*jnp.log(sigma2_hat)
                 sigma2_hat = update_sigma2(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau)
                 sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
                 s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
                 if cost_checks:
-                    cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                    cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz)/2*jnp.log(sigma2_hat)
                 if cost_checks and cost_after > cost_before + 1e-8:
                     print("It's sigma2!")
                     print(cost_after - cost_before)
@@ -479,7 +483,7 @@ if __name__=='__main__':
 
     ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
     #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
-    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = False)
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = True)
 
     #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
     print(np.nanmax(np.abs(sbl_betas[:,-1,0]-ncv_betas[1,:])))
