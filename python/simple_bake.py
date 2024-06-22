@@ -16,7 +16,8 @@ np.random.seed(123)
 
 N = 10
 P = 2
-
+nnz = 1
+#
 #N = 100
 #P = 20
 #nnz = 1
@@ -63,8 +64,8 @@ for rep in tqdm(range(reps)):
 
 fig = plt.figure()
 trans = np.log10
-#plt.boxplot([trans(err_ncv), trans(err_sbl)])
-plt.boxplot(err_ncv-err_sbl)
+plt.boxplot([trans(err_ncv), trans(err_sbl)])
+#plt.boxplot(err_ncv-err_sbl)
 plt.savefig("bake.pdf")
 plt.close()
 
