@@ -39,7 +39,7 @@ def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
 
 ################################################################################################
 ## Us
-def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = False, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = True, max_nnz = 40):
+def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = True, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = True, max_nnz = 40):
     #print("default params.")
     #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'; cost_checks = True; max_nnz = 40
     #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = True; novar = False; plotname = 'traj.pdf'; cost_checks = True
@@ -76,7 +76,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             #big_s = jax.lax.cond(jnp.abs(x)<s, lambda: 0., lambda: x)
             #ret = jax.lax.cond(s<1., lambda: smol_s, lambda: big_s)
             #return ret
-            print("Warning: MCP prox ignore equality edge cases.")
+            #print("Warning: MCP prox ignore equality edge cases.")
             #s *= 2 # Because this is a cdf.
 
             isgtlt = (jnp.abs(x) > s).astype(int)
@@ -248,12 +248,10 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #MCP_LAMBDA_max = jnp.sqrt(jnp.max(x2))*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
     MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
 
-
     #sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
     #s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
     #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
 
-    print("At least one reason novar doesn't work is because of the MCP_lam_max vandalism.")
     ## Generate penalty sequence.
     T = 100
 
@@ -339,7 +337,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     it = 0
     #t, tau = 0, tau_range[0]
-    for t, tau in enumerate(tqdm(tau_range)):
+    for t, tau in enumerate(tqdm(tau_range, disable = not verbose)):
         tau_effective = tau*jnp.ones(K)
 
         lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau)
@@ -471,20 +469,20 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     else:
         return Q.mean(), yy_hat[-1]
 
-if __name__=='__main__':
-    np.random.seed(124)
-    N = 40
-    P = 40
-    X = np.random.normal(size=[N,P])
-    #y = X[:,0] + np.random.normal(size=N) + 50
-    y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
-    #y = -0.03*X[:,0] + np.random.normal(size=N) + 50
-    XX = np.random.normal(size=[N,P])
-
-    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
-    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = True)
-
-    #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-    print(np.nanmax(np.abs(sbl_betas[:,-1,0]-ncv_betas[1,:])))
-    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+#if __name__=='__main__':
+#    np.random.seed(124)
+#    N = 40
+#    P = 40
+#    X = np.random.normal(size=[N,P])
+#    #y = X[:,0] + np.random.normal(size=N) + 50
+#    y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
+#    #y = -0.03*X[:,0] + np.random.normal(size=N) + 50
+#    XX = np.random.normal(size=[N,P])
+#
+#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+#    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
+#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = True)
+#
+#    #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+#    print(np.nanmax(np.abs(sbl_betas[:,-1,0]-ncv_betas[1,:])))
+#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))

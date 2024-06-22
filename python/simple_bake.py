@@ -14,15 +14,20 @@ import matplotlib.pyplot as plt
 
 np.random.seed(123)
 
-N = 100
-NN = 1000
-P = 100
+N = 10
+P = 2
+
+#N = 100
+#P = 20
+#nnz = 1
+
 #N = 10000
 #P = 1000
 
-nnz = 10
-#nnz = 1
-reps = 1
+NN = 1000
+
+#nnz = 10
+reps = 100
 #reps = 1
 
 err_sbl = np.zeros(reps)*np.nan
@@ -46,18 +51,20 @@ for rep in tqdm(range(reps)):
     y = X1@beta_true + np.random.normal(scale=sigma2_true,size=N)
     yy = XX1@beta_true + np.random.normal(scale=sigma2_true,size=NN)
 
-    #beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = False, novar = False)
-    #beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = True, novar = False, penalty = 'MCP', cost_checks = True)
-    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = False, doplot = True, novar = False, penalty = 'MCP', cost_checks = False)
+    #beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = False, doplot = True, novar = False, penalty = 'MCP', cost_checks = False, verbose = False)
+    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = True, novar = False, penalty = 'MCP', cost_checks = False, verbose = False)
     beta_ncv, yy_ncv = pred_ncv(X, y, XX)
     beta_ncv = beta_ncv[1:]
 
+    assert beta_sbl.shape==beta_true[1:].shape
+    assert beta_ncv.shape==beta_true[1:].shape
     err_sbl[rep] = np.mean(np.square(beta_sbl - beta_true[1:]))
     err_ncv[rep] = np.mean(np.square(beta_ncv - beta_true[1:]))
 
 fig = plt.figure()
-plt.boxplot([err_ncv, err_sbl])
-#plt.boxplot(err_ncv-err_sbl)
+trans = np.log10
+#plt.boxplot([trans(err_ncv), trans(err_sbl)])
+plt.boxplot(err_ncv-err_sbl)
 plt.savefig("bake.pdf")
 plt.close()
 
