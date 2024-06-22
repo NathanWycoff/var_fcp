@@ -110,13 +110,23 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     dP_FCP = jax.vmap(jax.vmap(dP_FCP1))
     v_f = get_Q(0,1).variance().astype(np.float64)
 
+    #def update_sigma2_pre(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau):
+    #    for k in range(K):
+    #        t1 = jnp.sum(jnp.square(y_train[k] - preds[k]))
+    #        t2 = v_f * jnp.sum(x2[k,:]/jnp.square(lam[k,:]))
+    #        t3 = jnp.sum(2*tau*jax.vmap(P_FCP)(lam[k,:]*eta[k,:]))
+    #        sigma2_hat = sigma2_hat.at[k].set((t1+t2+t3)/Ns[k])
+    #    return sigma2_hat
+
     def update_sigma2_pre(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau):
+        nnz = jnp.sum(eta!=0, axis = 1)
         for k in range(K):
             t1 = jnp.sum(jnp.square(y_train[k] - preds[k]))
             t2 = v_f * jnp.sum(x2[k,:]/jnp.square(lam[k,:]))
             t3 = jnp.sum(2*tau*jax.vmap(P_FCP)(lam[k,:]*eta[k,:]))
-            sigma2_hat = sigma2_hat.at[k].set((t1+t2+t3)/Ns[k])
+            sigma2_hat = sigma2_hat.at[k].set((t1+t2+t3)/(Ns[k]+P-nnz[k]))
         return sigma2_hat
+
 
     ## Lambda update functions.
     def body_fun_lam(val):
@@ -266,8 +276,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P])
         s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
         varinit_iters = 10000
-        #varinit_iters = 100
-        init_thresh = 1e-4
+        varinit_iters = 100
+        init_thresh = 1e-8
         diff = np.inf
         vi = 0
         costs = np.repeat(np.nan,varinit_iters)
@@ -293,10 +303,10 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             print(sigma2_hat)
 
         ## Closed form optim
-        #ynorm2 = np.sum(np.square(y_train))
-        #lam_opt = jnp.sqrt((N-1)*v_f*x2/ynorm2)
-        #sigma2_opt = ynorm2/(N-1)
-        #variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam_opt[-1,:], 0., sigma2_opt, v_f, P_FCP)
+        ynorm2 = np.sum(np.square(y_train))
+        lam_opt = jnp.sqrt(N*v_f*x2/ynorm2)
+        sigma2_opt = ynorm2/N
+        variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam_opt[-1,:], 0., sigma2_opt, v_f, P_FCP)
 
         if vi==varinit_iters:
             print("Warning: nonconvergence in initialization.")
@@ -313,8 +323,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             tau_max = xmax * jnp.abs(MCP_LAMBDA_max) / lam_eta0
         tau_max *= (1+1e-1)
 
-        #tau_min = 1e-3*tau_max if N>P else 5e-2*tau_max
-        tau_min = 1e-3*tau_max if N>P else (1-1e-8)*tau_max
+        tau_min = 1e-3*tau_max if N>P else 5e-2*tau_max
+        #tau_min = 1e-3*tau_max if N>P else (1-1e-8)*tau_max
         #print("Weird min")
 
         tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
@@ -463,13 +473,14 @@ if __name__=='__main__':
     P = 40
     X = np.random.normal(size=[N,P])
     #y = X[:,0] + np.random.normal(size=N) + 50
-    #y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
-    y = -0.03*X[:,0] + np.random.normal(size=N) + 50
+    y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
+    #y = -0.03*X[:,0] + np.random.normal(size=N) + 50
     XX = np.random.normal(size=[N,P])
 
     ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
     #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
     sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = False)
 
-    print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+    #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+    print(np.nanmax(np.abs(sbl_betas[:,-1,0]-ncv_betas[1,:])))
     print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
