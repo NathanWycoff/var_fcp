@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-exec(open('python/valencia.py').read())
 from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 from tqdm import tqdm
 import matplotlib.pyplot as plt

@@ -202,7 +202,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
         X_train = X_train.at[-1,:Ns[-1],:].set(X)
         y_train = y_train.at[-1,:Ns[-1]].set(y)
-        X_test = X_test.at[-1,:NNs[-1],:].set(X)
+        X_test = X_test.at[-1,:NNs[-1],:].set(XX)
         y_test = y_test.at[-1,:NNs[-1]].set(np.nan*np.zeros(NN))
 
     else:

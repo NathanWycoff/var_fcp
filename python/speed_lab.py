@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from time import time
 
 np.random.seed(124)
-N = 40 # TODO: 41 is way harder randomly?
+N = 41 # TODO: 41 is way harder randomly?
 P = 40
 X = np.random.normal(size=[N,P])
 #y = X[:,0] + np.random.normal(size=N) + 50
