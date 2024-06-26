@@ -36,7 +36,7 @@ for pnzi,pnz in enumerate(pnzs):
         plt.plot(med['ncv_mse'], label = 'NCV', color = 'C1')
         plt.plot(lb['ncv_mse'], color = 'C1', linestyle = '--')
         plt.plot(ub['ncv_mse'], color = 'C1', linestyle = '--')
-        if pnzi == 0:
+        if pnzi == 0 and Pi == 0:
             plt.legend()
         plt.yscale('log')
         ax = plt.gca()

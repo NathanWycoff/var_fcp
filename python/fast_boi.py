@@ -38,10 +38,15 @@ def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
 
 ################################################################################################
 ## Us
-def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = True, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = True, max_nnz = np.inf):
-    #print("default params.")
-    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = False; plotname = 'traj.pdf'; cost_checks = True; max_nnz = 40
-    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = True; novar = False; plotname = 'traj.pdf'; cost_checks = True
+def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = True, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = False, max_nnz = np.inf):
+    assert not (np.any(np.isnan(X)) or np.any(np.isnan(y)) or np.any(np.isnan(XX)))
+    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = True; novar = False; plotname = 'traj.pdf'; cost_checks = False; max_nnz = np.inf
+    if not do_cv:
+        print("New version not tested without CV.")
+    if novar:
+        print("New version not tested without var.")
+    if cost_checks:
+        print("New version not tested with cost checks.")
     A_MCP = 3.
     lam_maxit = 100
     N,P = X.shape
@@ -109,6 +114,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     dP_FCP = jax.vmap(jax.vmap(dP_FCP1))
     v_f = get_Q(0,1).variance().astype(np.float64)
 
+    prox_Pv = jax.vmap(prox_P)
+    P_FCPv = jax.vmap(jax.vmap(P_FCP))
+
     #def update_sigma2_pre(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau):
     #    for k in range(K):
     #        t1 = jnp.sum(jnp.square(y_train[k] - preds[k]))
@@ -119,17 +127,16 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     def update_sigma2_pre(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau):
         nnz = jnp.sum(eta!=0, axis = 1)
-        for k in range(K):
-            t1 = jnp.sum(jnp.square(y_train[k] - preds[k]))
-            t2 = v_f * jnp.sum(x2[k,:]/jnp.square(lam[k,:]))
-            t3 = jnp.sum(2*tau*jax.vmap(P_FCP)(lam[k,:]*eta[k,:]))
-            sigma2_hat = sigma2_hat.at[k].set((t1+t2+t3)/(Ns[k]+P-nnz[k]))
+        t1 = jnp.nansum(jnp.square(y_train - preds), axis = 1)
+        t2 = v_f * jnp.nansum(x2/jnp.square(lam), axis = 1)
+        t3 = jnp.nansum(2*tau*P_FCPv(lam*eta), axis = 1)
+        sigma2_hat = (t1+t2+t3)/(Ns+P-nnz)
         return sigma2_hat
 
     ## Lambda update functions.
     def body_fun_lam(val):
         eta, lam, tau_effective, s, sigma2_wide, diff, thresh, it, max_iters = val
-        new_lam = jnp.power(1/s*v_f/(eta*tau_effective/sigma2_wide*dP_FCP(lam*eta)+1/lam), 1./3)
+        new_lam = jnp.power(1/s*v_f/(eta*tau_effective[:,np.newaxis]/sigma2_wide*dP_FCP(lam*eta)+1/lam), 1./3)
         diff = jnp.max(jnp.abs(new_lam-lam))
         return eta, new_lam, tau_effective, s, sigma2_wide, diff, thresh, it+1, max_iters
 
@@ -148,86 +155,78 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     ## eta update functions
     def body_fun_eta(p, val):
         eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2 = val
-        for k in range(K):
-            pred_other = preds[k] - eta[k,p] * X_train[k][:,p]
-            resid_other = y_train[k] - pred_other
-            ols = jnp.mean(X_train[k][:,p] * resid_other)
 
-            eta_new = prox_P(ols*lam[k,p], jnp.square(lam[k,p])*tau_effective[k]/x2[k,p])/lam[k,p]
-            eta = eta.at[k,p].set(eta_new)
+        pred_other = preds - eta[:,p,np.newaxis] * X_train[:,:,p]
+        resid_other = y_train - pred_other
+        ols = jnp.nanmean(X_train[:,:,p]*resid_other, axis = 1)
 
-            preds[k] = pred_other + eta[k,p] * X_train[k][:,p]
+        eta_new = prox_Pv(ols*lam[:,p], jnp.square(lam[:,p])*tau_effective/x2[:,p])/lam[:,p]
+        eta = eta.at[:,p].set(eta_new)
+
+        preds = pred_other + eta[:,p,np.newaxis] * X_train[:,:,p]
 
         return eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2
 
     def update_eta_pre(eta, lam, X_train, y_train, x2, sigma2_hat, tau_effective, s, preds):
         val = (eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2)
         eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2 = jax.lax.fori_loop(0, P, body_fun_eta, val)
-        #for p in range(P):
-        #    val = body_fun_eta(p,val)
-        #eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2 = val
         return eta, preds
     ########################################
 
-
     # do CV splits.
-    #do_cv = False
     if do_cv:
         cv_folds = 10
-        #cv_folds = 2
         K = cv_folds+1
         inds = np.arange(N)
         np.random.shuffle(inds)
         test_inds = np.array_split(inds, cv_folds)
+        train_inds = [np.setdiff1d(np.arange(N),ti) for ti in test_inds]
+        Ns = jnp.array([len(t) for t in train_inds]+[N]) # Size of each train fold, and full dataset is last. 
+        NNs = jnp.array([len(t) for t in test_inds]+[NN]) # Size of each test fold
 
-        errs = list()
-        X_train = []
-        y_train = []
-        X_test = []
-        y_test = []
+        max_N = np.max(Ns)
+        max_NN = np.max(NNs)
+        X_train = jnp.zeros([K,max_N,P])*np.nan
+        y_train = jnp.zeros([K,max_N])*np.nan
+        X_test = jnp.zeros([K,max_NN,P])*np.nan
+        y_test = jnp.zeros([K,max_NN])*np.nan
+
         for cv_i in range(cv_folds):
             testi = test_inds[cv_i]
             traini = np.setdiff1d(np.arange(N),test_inds[cv_i])
 
-            X_train.append(X[traini,:])
-            y_train.append(y[traini])
-            X_test.append(X[testi,:])
-            y_test.append(y[testi])
+            X_train = X_train.at[cv_i,:Ns[cv_i],:].set(X[traini,:])
+            y_train = y_train.at[cv_i,:Ns[cv_i]].set(y[traini])
+            X_test = X_test.at[cv_i,:NNs[cv_i],:].set(X[testi,:])
+            y_test = y_test.at[cv_i,:NNs[cv_i]].set(y[testi])
 
-        X_train.append(X)
-        y_train.append(y)
-        X_test.append(XX)
-        y_test.append(jnp.array(np.nan))
+        X_train = X_train.at[-1,:Ns[-1],:].set(X)
+        y_train = y_train.at[-1,:Ns[-1]].set(y)
+        X_test = X_test.at[-1,:NNs[-1],:].set(X)
+        y_test = y_test.at[-1,:NNs[-1]].set(np.nan*np.zeros(NN))
+
     else:
         K = 1
-        X_train = [X]
-        y_train = [y]
-        X_test = [XX]
-        y_test = [np.nan]
+        X_train = X[np.newaxis,:,:]
+        y_train = y[np.newaxis,:]
+        X_test = XX[np.newaxis,:,:]
+        y_test = jnp.zeros(XX.shape[0])*jnp.nan
 
-    Ns = jnp.array([Xk.shape[0] for Xk in X_train])
-    NNs = jnp.array([Xk.shape[0] for Xk in X_test])
-
-
-    #XX_train[k] = (XX_train[k] - mu_X[k][np.newaxis,:]) / sig_X[k][np.newaxis,:]
+        Ns = jnp.array([N])
+        NNs = jnp.array([NN])
 
     if scale:
-        mu_X = []
-        sig_X = []
-        mu_y = []
-        sig_y = []
-        for k in range(K):
-            eps_div = 1e-6
-            mu_X.append(np.mean(X_train[k], axis = 0))
-            sig_X.append(np.std(X_train[k], axis = 0)+ eps_div)
-            mu_y.append(np.mean(y_train[k]))
-            X_train[k] = (X_train[k] - mu_X[k][np.newaxis,:]) / sig_X[k][np.newaxis,:]
-            X_test[k] = (X_test[k] - mu_X[k][np.newaxis,:]) / sig_X[k][np.newaxis,:]
+        eps_div = 1e-6
+        mu_X = jnp.nanmean(X_train, axis = 1)
+        sig_X = jnp.nanstd(X_train, axis = 1) + eps_div
+        mu_y = np.nanmean(y_train, axis = 1)
 
-            #sig_y = np.std(y) + eps_div
-            sig_y.append(1.)
-            y_train[k] = (y_train[k] - mu_y[k]) / sig_y[k]
-            y_test[k] = (y_test[k] - mu_y[k]) / sig_y[k]
+        X_train = (X_train - mu_X[:,np.newaxis,:]) / sig_X[:,np.newaxis,:]
+        X_test = (X_test - mu_X[:,np.newaxis,:]) / sig_X[:,np.newaxis,:]
+
+        y_train = (y_train - mu_y[:,np.newaxis])
+        y_test = (y_test - mu_y[:,np.newaxis])
+
 
     ## Get tau_max
     sdy = np.std(y_train[-1])
@@ -237,82 +236,34 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     update_sigma2 = jax.jit(update_sigma2_pre)
 
     max_iters = 10000
-    #max_iters = 100
     block_thresh = 1e-4
 
-    x2 = jnp.array([jnp.sum(jnp.square(Xk), axis=0) for Xk in X_train]) # this is just N when scaled. 
+    x2 = jnp.nansum(jnp.square(X_train), axis = 1)
 
     eta = jnp.zeros([K,P])
-    #MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
-    #MCP_LAMBDA_max = jnp.sqrt(jnp.max(x2))*np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
-    MCP_LAMBDA_max = np.max(np.abs(X_train[-1].T @ y_train[-1]))/N # Evaluate range on full dataset.
-
-    #sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
-    #s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
-    #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
+    MCP_LAMBDA_max = np.max(np.abs(X_train[-1,:,:].T @ y_train[-1,:]))/N # Evaluate range on full dataset.
 
     ## Generate penalty sequence.
     T = 100
 
-    yy_hat = [np.zeros([T,NNs[k]])*np.nan for k in range(K)]
-    preds = [X_train[k] @ eta[k,:] for k in range(K)]
+    #yy_hat = [np.zeros([T,NNs[k]])*np.nan for k in range(K)]
+    yy_hat = np.zeros([K,T,max_NN])*np.nan
+    #preds = [X_train[k] @ eta[k,:] for k in range(K)]
+    preds = (X_train @ eta[:,:,np.newaxis]).squeeze()
 
     if novar:
         MCP_LAMBDA_min = 1e-3*MCP_LAMBDA_max if N>P else 5e-2*MCP_LAMBDA_max
-        #print("Small T")
-        #T = 4
         MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max), num = T))
         tau_range = A_MCP*np.square(MCP_LAMBDA_range)
     else:
-        ### Get init sigma2/lam; (i.e. optimal if eta=0).
-        #lam = jnp.ones([K,P])
-        ##sigma2_hat = jnp.ones([K]) * 0.12308
-        #sigma2_hat = jnp.ones([K]) 
-        ##sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
-        #sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P])
-        #s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
-        #varinit_iters = 10000
-        #varinit_iters = 100
-        #init_thresh = 1e-8
-        #diff = np.inf
-        #vi = 0
-        #costs = np.repeat(np.nan,varinit_iters)
-        #while vi < varinit_iters and diff > init_thresh:
-        #    costs[vi] = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], 0., sigma2_hat[-1], v_f, P_FCP)
-
-        #    vi += 1
-        #    #print(variational_cost(X_train[0], y_train[0], jnp.zeros([P]), lam[-1,:], 1., sigma2_hat, v_f, P_FCP))
-        #    lam_last = jnp.copy(lam)
-        #    sigma2_last = jnp.copy(sigma2_hat)
-
-        #    #lam = jnp.sqrt(v_f * x2/sigma2_hat[:,np.newaxis])
-        #    #sigma2_hat = (np.array([np.sum(np.square(yk))for yk in y_train]) + v_f * jnp.sum(x2/jnp.square(lam), axis = 1)) / N
-        #    lam, lam_it = update_lam(jnp.zeros([K,P]), lam, 0., s, sigma2_wide, max_iters = lam_maxit)
-        #    sigma2_hat = update_sigma2(sigma2_hat, y_train, preds, Ns, jnp.zeros([K,P]), lam, v_f, x2, 0.)
-        #    #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
-        #    sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P])
-        #    s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
-
-        #    diff = max([jnp.max(jnp.abs(sigma2_hat - sigma2_last)), jnp.max(jnp.abs(lam_last-lam))])
-        #    print(diff)
-        #    print(lam)
-        #    print(sigma2_hat)
-        #if vi==varinit_iters:
-        #    print("Warning: nonconvergence in initialization.")
-        #    import IPython; IPython.embed()
-
         ## Closed form optim
-        ynorm2 = np.array([np.sum(np.square(yt)) for yt in y_train])
-        #lam_opt = jnp.sqrt(N*v_f*x2/ynorm2)
+        #ynorm2 = np.array([np.sum(np.square(yt)) for yt in y_train])
+        ynorm2 = jnp.nansum(jnp.square(y_train), axis = 1)
         lam = jnp.sqrt(Ns[:,np.newaxis]*v_f*x2/ynorm2[:,np.newaxis])*jnp.ones([K,P])
-        #sigma2_opt = ynorm2/N
         sigma2_hat = ynorm2/Ns
-        sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P])
+        sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P]) #TODO: Sort out exactly what we want wrt sigma and x2.
         s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
-        #variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam_opt[-1,:], 0., sigma2_opt, v_f, P_FCP)
 
-
-        ### Get tau_max if s > 1:
         xmax = np.max(x2[-1,:])
         lam_eta0 = np.min(lam)
 
@@ -324,12 +275,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         tau_max *= (1+1e-1)
 
         tau_min = 1e-3*tau_max if N>P else 5e-2*tau_max
-        #tau_min = 1e-3*tau_max if N>P else (1-1e-8)*tau_max
-        #print("Weird min")
-
         tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
 
-    ## Init params
+    ## Trace storage
     etas = np.zeros([T, K, P])*np.nan
     lams = np.zeros([T, K, P])*np.nan
     lams_a = np.zeros([T, K, P])*np.nan
@@ -337,12 +285,11 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     it = 0
     #t, tau = 0, tau_range[0]
     for t, tau in enumerate(tqdm(tau_range, disable = not verbose)):
-        tau_effective = tau*jnp.ones(K)
+        tau_effective = tau*jnp.ones(K) # TODO: Remvoe
 
         lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau)
         if novar:
             lam = lam_a
-
             sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
             s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
             sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
@@ -353,11 +300,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             eta_last = jnp.copy(eta)
             lam_last = jnp.copy(lam)
             preds_last = [jnp.copy(p) for p in preds]
-
-            #eta = jnp.copy(eta_last )
-            #lam = jnp.copy(lam_last )
-            #preds = [jnp.copy(p) for p in preds_last ]
-            #tau_effective = tau_range[t_broke]*jnp.ones(K)
 
             if cost_checks:
                 cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
@@ -374,7 +316,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 if cost_checks:
                     cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
                 #lc_before =  lam_costs(lam[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP)
-                lam, lam_it = update_lam(eta, lam, tau, s, sigma2_wide, max_iters = lam_maxit)
+                lam, lam_it = update_lam(eta, lam, tau_effective, s, sigma2_wide, max_iters = lam_maxit)
                 #lc_after =  lam_costs(lam[-1,:], eta[-1,:], X_train[-1], sigma2_hat[-1], v_f, P_FCP)
                 if cost_checks:
                     cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
@@ -391,7 +333,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                     nnz = jnp.sum(eta!=0, axis = 1)
                     cost_before = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz)/2*jnp.log(sigma2_hat)
                 sigma2_hat = update_sigma2(sigma2_hat, y_train, preds, Ns, eta, lam, v_f, x2, tau)
-                sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
+                #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
+                sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P]) #TODO: Sort out exactly what we want wrt sigma and x2.
                 s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
                 if cost_checks:
                     cost_after = variational_cost(X_train[-1], y_train[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz)/2*jnp.log(sigma2_hat)
@@ -406,10 +349,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         etas[t,:,:] = eta
         lams[t,:,:] = lam
         lams_a[t,:,:] = lam_a
-        for k in range(K):
-            yy_hat[k][t,:] = X_test[k] @ eta[k,:]
+        yy_hat[:,t,:] = (X_test @ eta[:,:,np.newaxis]).squeeze()
 
-        nnz = np.sum(eta[-1,::]!=0)
+        nnz = np.sum(eta[-1,:]!=0)
         if nnz >= max_nnz:
             break
 
@@ -419,18 +361,13 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         #print("Stopped main loop on tau %d after %d iters with %d nnz"%(t,it,np.sum(eta!=0)))
 
     if do_cv:
-        errs = jnp.zeros(T)
-        for k in range(K-1):
-            errs += np.mean(np.square(yy_hat[k] - y_test[k]), axis = 1) / (K-1)
-        tau_opti = np.nanargmin(errs)
-        #tau_opt = tau_range[tau_opti]
+        errs = (np.apply_over_axes(np.nansum, np.square(yy_hat-y_test[:,np.newaxis,:]), [0,2]) / (K-1)).squeeze()
+        tau_opti = np.nanargmin(errs) # TODO: do we really want nanargmin here?
 
     if scale:
-        for k in range(K):
-            yy_hat[k] = sig_y[k]*yy_hat[k] + mu_y[k]
-
-            etas[:,k,:] = (sig_y[k] / sig_X[k])[np.newaxis,:] * etas[:,k,:]
-            lams[:,k,:] = np.square(sig_X[k] / sig_y[k])[np.newaxis,:] * lams[:,k,:]
+        yy_hat + mu_y[:,np.newaxis,np.newaxis]
+        etas = 1/sig_X[np.newaxis,:,:] * etas 
+        lams = np.square(sig_X)[np.newaxis,:,:] * lams
 
     K_plot = np.min([5,P])
 
@@ -464,10 +401,10 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     Q = get_Q(etas, lams)
     if do_cv:
         #return Q[tau_opti,-1,:].mean(), yy_hat[-1][tau_opti,:]
-        return Q[tau_opti,-1,:], yy_hat[-1][tau_opti,:]
+        return Q[tau_opti,-1,:], yy_hat[-1,tau_opti,:]
     else:
         #return Q.mean(), yy_hat[-1]
-        return Q, yy_hat[-1]
+        return Q, yy_hat[-1,:]
 
 #if __name__=='__main__':
 #    np.random.seed(124)
