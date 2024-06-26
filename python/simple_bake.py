@@ -14,13 +14,24 @@ import matplotlib.pyplot as plt
 
 np.random.seed(123)
 
+## Smol but N>P
 N = 10
 P = 2
-nnz = 1
-#
+nnz = 2
+
+### Smolish and N=P
+#N = 40
+#P = 40
+#nnz = 5
+
+
+#N = 1000
+#P = 100
+#nnz = 50
+
 #N = 100
-#P = 20
-#nnz = 1
+#P = 1000
+#nnz = 5
 
 #N = 10000
 #P = 1000
@@ -28,10 +39,13 @@ nnz = 1
 NN = 1000
 
 #nnz = 10
-reps = 100
-#reps = 1
+reps = 30
+#reps = 4
+
+penalty = 'MCP'
 
 err_sbl = np.zeros(reps)*np.nan
+cov_sbl = np.zeros(reps)*np.nan
 err_ncv = np.zeros(reps)*np.nan
 for rep in tqdm(range(reps)):
     beta_nz = np.random.normal(size=nnz)
@@ -53,7 +67,16 @@ for rep in tqdm(range(reps)):
     yy = XX1@beta_true + np.random.normal(scale=sigma2_true,size=NN)
 
     #beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = False, doplot = True, novar = False, penalty = 'MCP', cost_checks = False, verbose = False)
-    beta_sbl, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = True, novar = False, penalty = 'MCP', cost_checks = False, verbose = False)
+    Q, yy_sbl = pred_sbl(X, y, XX, do_cv = True, doplot = True, novar = False, penalty = penalty, cost_checks = False, verbose = False)
+    if penalty=='MCP':
+        lb = tri_quant(Q, 0.025)
+        ub = tri_quant(Q, 0.975)
+        med = tri_quant(Q, 0.5)
+    else:
+        lb = Q.quantile(0.025)
+        ub = Q.quantile(0.975)
+        med = Q.quantile(0.5)
+    beta_sbl = Q.mean()
     beta_ncv, yy_ncv = pred_ncv(X, y, XX)
     beta_ncv = beta_ncv[1:]
 
@@ -61,6 +84,9 @@ for rep in tqdm(range(reps)):
     assert beta_ncv.shape==beta_true[1:].shape
     err_sbl[rep] = np.mean(np.square(beta_sbl - beta_true[1:]))
     err_ncv[rep] = np.mean(np.square(beta_ncv - beta_true[1:]))
+
+    covered = np.logical_and(lb[nz_locs] <= beta_true[1:][nz_locs], ub[nz_locs] >= beta_true[1:][nz_locs])
+    cov_sbl[rep] = np.mean(covered)
 
 fig = plt.figure()
 trans = np.log10

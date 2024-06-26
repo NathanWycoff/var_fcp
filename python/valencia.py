@@ -465,9 +465,11 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     Q = get_Q(etas, lams)
     if do_cv:
-        return Q[tau_opti,-1,:].mean(), yy_hat[-1][tau_opti,:]
+        #return Q[tau_opti,-1,:].mean(), yy_hat[-1][tau_opti,:]
+        return Q[tau_opti,-1,:], yy_hat[-1][tau_opti,:]
     else:
-        return Q.mean(), yy_hat[-1]
+        #return Q.mean(), yy_hat[-1]
+        return Q, yy_hat[-1]
 
 #if __name__=='__main__':
 #    np.random.seed(124)
