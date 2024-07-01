@@ -15,7 +15,9 @@ r = robjects.r
 
 ncvreg = importr('ncvreg')
 
-def pred_ncv(X, y, XX):
+def pred_ncv(X, y, XX, lik = 'gaussian'):
+    if lik== 'bernoulli':
+        lik = 'binomial'
     X_arr = robjects.FloatVector(X.T.flatten())
     X_R = robjects.r['matrix'](X_arr, nrow = X.shape[0])
 
@@ -25,13 +27,15 @@ def pred_ncv(X, y, XX):
     y_arr = robjects.FloatVector(y)
     y_R = robjects.r['matrix'](y_arr, ncol = 1)
 
-    fit = ncvreg.cv_ncvreg(X_R, y_R)
+    fit = ncvreg.cv_ncvreg(X_R, y_R, family = lik)
     beta_hat = r.coef(fit)
     yy_hat = r.predict(fit, XX_R)
 
     return beta_hat, yy_hat
 
-def pred_ncv_no_cv(X, y, XX):
+def pred_ncv_no_cv(X, y, XX, lik = 'gaussian'):
+    if lik== 'bernoulli':
+        lik = 'binomial'
     X_arr = robjects.FloatVector(X.T.flatten())
     X_R = robjects.r['matrix'](X_arr, nrow = X.shape[0])
 
@@ -41,7 +45,7 @@ def pred_ncv_no_cv(X, y, XX):
     y_arr = robjects.FloatVector(y)
     y_R = robjects.r['matrix'](y_arr, ncol = 1)
 
-    fit = ncvreg.ncvreg(X_R, y_R)
+    fit = ncvreg.ncvreg(X_R, y_R, family = lik)
     beta_hat = r.coef(fit)
     yy_hat = r.predict(fit, XX_R)
 
