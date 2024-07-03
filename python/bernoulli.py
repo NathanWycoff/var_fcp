@@ -255,7 +255,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             a_xi = jax.vmap(jax.vmap(lambda xi: jax.lax.cond(jnp.abs(xi)>1e-6,lambda:0.5/xi*(jax.nn.sigmoid(xi)-0.5),lambda: 0.125)))
         else:
             raise Exception("Bad lik.")
-        print("a_xi does not preserve nan-ness.")
+        #print("a_xi does not preserve nan-ness.")
         a = a_xi(xi)
         ar = jnp.sqrt(2*a)
 
@@ -274,14 +274,10 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     eta = jnp.zeros([K,P])
 
-    #MCP_LAMBDA_max = np.max(np.abs(ALPHA[-1,:,:].T @ alpha[-1,:])/x2[-1,:]) # Evaluate range on full dataset.
-    print(" No reg. ")
+    MCP_LAMBDA_max = np.max(np.abs(ALPHA[-1,:,:].T @ alpha[-1,:])/x2[-1,:]) # Evaluate range on full dataset.
+
     ## Generate penalty sequence.
-    T = 1
-    MCP_LAMBDA_max = 1e-6
-    print(" No reg. ")
-
-
+    T = 100
 
     #yy_hat = [np.zeros([T,NNs[k]])*np.nan for k in range(K)]
     yy_hat = np.zeros([K,T,max_NN])*np.nan
@@ -308,7 +304,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         #print("Are we sure about these Ns? or should be x2?")
         #lam = jnp.sqrt(Ns[:,np.newaxis]*v_f*x2/(Ns*sigma2_hat)[:,np.newaxis])*jnp.ones([K,P])
         lam = jnp.sqrt(x2*v_f/sigma2_wide)
-        print("new lam init")
 
         xmax = np.max(x2[-1,:])
         lam_eta0 = np.min(lam)
@@ -401,20 +396,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                         import IPython; IPython.embed()
                 else:
                     ## Update xi, the locations about which series expansions are made for each term of the likelihood.
-                    #xi = jnp.sqrt(jnp.nansum(v_f*jnp.square(X_train/jnp.square(lam)[:,np.newaxis,:]), axis = 2) + jnp.square(preds))
-                    #import IPython; IPython.embed()
-                    #jnp.sqrt(jnp.nansum(jnp.square(X_train / lam[:,np.newaxis,:]), axis = 2) + jnp.square(preds))
-                    #xi = jnp.sqrt(jnp.nansum(v_f*jnp.square(X_train/lam[:,np.newaxis,:]), axis = 2) + jnp.square(preds))
                     preds_xi = (X_train @ eta[:,:,np.newaxis]).squeeze()
-                    xi = jnp.abs(preds_xi) # 
-                    print("pred only xi.")
-                    #import IPython; IPython.embed()
-                    #jax.lax.batch_matmul(ALPHA.transpose([0,2,1]), ALPHA)
-                    #jnp.nansum(jnp.square(ALPHA), axis = 2)/jnp.square(lam)[:,np.newaxis,:]
-                    #SIGMA_inv = np.linalg.diag(ALPHA/jnp.square(lam)[:,np.newaxis,:])
-                    #xi = jnp.sqrt(jnp.nansum(jnp.square(ALPHA/jnp.square(lam)[:,np.newaxis,:]), axis = 2) + jnp.square(preds))
-                    #xi = jnp.sqrt(jnp.square(preds))
-                    #print("Funny xi")
+                    xi = jnp.sqrt(jnp.nansum(v_f*jnp.square(X_train/lam[:,np.newaxis,:]), axis = 2) + jnp.square(preds_xi))
                     a = a_xi(xi)
                     ar = jnp.sqrt(2*a)
                     # DRY violation
@@ -422,12 +405,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                     ALPHA = ar[:,:,np.newaxis] * X_train
                     x2 = jnp.nansum(jnp.square(ALPHA), axis = 1)
                     s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
-                    preds = (ALPHA @ eta[:,:,np.newaxis]).squeeze()
                     # DRY violation
+                    preds = (ALPHA @ eta[:,:,np.newaxis]).squeeze()
 
-            print(eta[-1,:])
-            print('preds:')
-            print(preds_xi[-1,:])
             diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
 
         etas[t,:,:] = eta
@@ -443,9 +423,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         if it==max_iters:
             print("Reached Max Iters on outer block.")
         #print("Stopped main loop on tau %d after %d iters with %d nnz"%(t,it,np.sum(eta!=0)))
-
-    print("Mean xi:")
-    print(np.mean(xi[-1,:]))
 
     if do_cv:
         if lik=='gaussian':
