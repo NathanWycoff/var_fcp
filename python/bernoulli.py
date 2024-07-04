@@ -19,6 +19,9 @@ from scipy.optimize import minimize_scalar
 import numpy as np
 from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 
+def xi_cost(xi, a):
+    iv = -jnp.log(xi)+xi/2-jnp.square(xi)*a
+    return jnp.sum(iv) 
 
 def variational_cost(X, y, eta, lam, tau, sigma2, v_f, P_FCP):
     N = X.shape[0]
@@ -233,7 +236,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             y_train = (y_train - mu_y[:,np.newaxis])
             y_test = (y_test - mu_y[:,np.newaxis])
 
-
     ## Get tau_max
     sdy = np.std(y_train[-1])
 
@@ -333,7 +335,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #X.T @ X * a[0,0]*2
 
     it = 0
-    #ti = 1
+    #ti = 0
     #t, tau = ti, tau_range[ti]
     for t, tau in enumerate(tqdm(tau_range, disable = not verbose)):
         tau_effective = tau*jnp.ones(K) # TODO: Remvoe
@@ -397,8 +399,16 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 else:
                     ## Update xi, the locations about which series expansions are made for each term of the likelihood.
                     preds_xi = (X_train @ eta[:,:,np.newaxis]).squeeze()
+                    if cost_checks:
+                        cost_before = xi_cost(xi, a)
                     xi = jnp.sqrt(jnp.nansum(v_f*jnp.square(X_train/lam[:,np.newaxis,:]), axis = 2) + jnp.square(preds_xi))
                     a = a_xi(xi)
+                    if cost_checks:
+                        cost_after = xi_cost(xi, a)
+                    if cost_checks and cost_after > cost_before + 1e-8:
+                        print("It's a!")
+                        print(cost_after - cost_before)
+                        import IPython; IPython.embed()
                     ar = jnp.sqrt(2*a)
                     # DRY violation
                     alpha = 1/ar * (y_train - 0.5)

@@ -17,11 +17,14 @@ from python.tfp_plus import tri_quant
 from scipy.optimize import minimize_scalar
 from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 
-N = 12000
+N = 100
 NN = 1000
-P = 2
+P = 10
 
-np.random.seed(123)
+np.random.seed(123) # Q: how come we have so much less regularization than them?
+np.random.seed(1234) # We do much better than them.
+np.random.seed(1237) # Q: Our estimate is big: bigger than accurate, bigger than ncv_reg, and even bigger than a straight-up logistic regression!
+np.random.seed(1241) # Q: Our estimate is big: bigger than accurate, bigger than ncv_reg, and even bigger than a straight-up logistic regression!
 
 ## Compare on binomial data.
 X = np.random.normal(size=[N,P])
@@ -36,13 +39,31 @@ yy = np.random.binomial(1,p=p_yy)
 exec(open('python/bernoulli.py').read())
 #np.random.seed(123)
 fst_Q, fst_preds = pred_sbl(X, y, XX, do_cv = True, novar = False, cost_checks = False, lik = 'bernoulli')
+print("With var adjustment:")
+print(fst_Q.mean())
+fst_Q, fst_preds = pred_sbl(X, y, XX, do_cv = True, novar = True, cost_checks = False, lik = 'bernoulli')
+print("Without var adjustment:")
 print(fst_Q.mean())
 
 # TODO: Intercept
 print("Hey there's no intercept :)")
 
 beta_ncv, yy_ncv = pred_ncv(X, y, XX, lik = 'bernoulli')
-beta_ncv
+print(beta_ncv)
+
+import statsmodels.api as sm
+#sm.Logit(np.array(y), np.array(X)).fit().summary()
+#sm.Logit(np.array(y), np.array(X)[:,3]).fit().summary()
+sm.Logit(np.array(y), np.array(X)[:,0]).fit().summary()
+#sm.Logit(np.array(y), sm.add_constant(np.array(X)[:,0])).fit().summary()
+#sm.Logit(np.array(y), np.array(X)).fit().summary()
+
+exec(open('python/theirs.py').read())
+mod = VBLogisticRegression(n_iter = 10000)
+mod.fit(X[:,:1], y)
+mod.coef_
+
+
 
 ### Compare on normal data.
 #X = np.random.normal(size=[N,P])
@@ -60,9 +81,6 @@ beta_ncv
 ### Manual lmao
 #ytild = y-0.5
 #np.linalg.lstsq(X/2, ytild)[0]
-
-import statsmodels.api as sm
-sm.Logit(y, X).fit().summary()
 
 exec(open('python/theirs.py').read())
 mod = VBLogisticRegression(n_iter = 100)
