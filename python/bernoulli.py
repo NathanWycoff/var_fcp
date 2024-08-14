@@ -41,10 +41,11 @@ def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
 
 ################################################################################################
 ## Us
-def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = True, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = False, max_nnz = np.inf, lik = 'gaussian'):
+def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = True, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = False, max_nnz = np.inf, lik = 'gaussian', tau_range = None, sigma2_fixed = None):
     assert not (np.any(np.isnan(X)) or np.any(np.isnan(y)) or np.any(np.isnan(XX)))
     assert lik in ['gaussian','bernoulli']
-    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = True; novar = False; plotname = 'traj.pdf'; cost_checks = False; max_nnz = np.inf; lik = 'bernoulli'
+    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = True; novar = False; plotname = 'traj.pdf'; cost_checks = False; max_nnz = np.inf; lik = 'bernoulli'; tau_range = None
+    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = True; plotname = 'traj.pdf'; cost_checks = False; max_nnz = np.inf; lik = 'gaussian'; tau_range = None; sigma2_fixed = None
     if not do_cv:
         print("New version not tested without CV.")
     if novar:
@@ -168,6 +169,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         eta_new = prox_Pv(ols*lam[:,p], jnp.square(lam[:,p])*tau_effective/x2[:,p])/lam[:,p]
         eta = eta.at[:,p].set(eta_new)
 
+        #gamma = lam*tau_effective
+        #a = 1/(np.square(lam)*tau_effective)
+
         preds = pred_other + eta[:,p,np.newaxis] * X_train[:,:,p]
 
         return eta, lam, tau_effective, s, sigma2_hat, preds, X_train, y_train, x2
@@ -276,30 +280,40 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     eta = jnp.zeros([K,P])
 
+    if penalty == 'laplace':
+        print("MCP max not tested with Laplace.")
     MCP_LAMBDA_max = np.max(np.abs(ALPHA[-1,:,:].T @ alpha[-1,:])/x2[-1,:]) # Evaluate range on full dataset.
 
     ## Generate penalty sequence.
-    T = 100
+    if tau_range is None:
+        T = 100
+    else:
+        T = len(tau_range)
 
     #yy_hat = [np.zeros([T,NNs[k]])*np.nan for k in range(K)]
     yy_hat = np.zeros([K,T,max_NN])*np.nan
     #preds = [X_train[k] @ eta[k,:] for k in range(K)]
     #preds = (X_train @ eta[:,:,np.newaxis]).squeeze()
-    preds = (ALPHA @ eta[:,:,np.newaxis]).squeeze()
+    #preds = (ALPHA @ eta[:,:,np.newaxis]).squeeze()
+    preds = (ALPHA @ eta[:,:,np.newaxis]).reshape([K,N])
 
     if novar:
         MCP_LAMBDA_min = 1e-3*MCP_LAMBDA_max if N>P else 5e-2*MCP_LAMBDA_max
         MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max), num = T))
-        tau_range = A_MCP*np.square(MCP_LAMBDA_range)
+        if tau_range is None:
+            tau_range = A_MCP*np.square(MCP_LAMBDA_range)
     else:
         ## Closed form optim
         #ynorm2 = np.array([np.sum(np.square(yt)) for yt in y_train])
 
-        if lik=='gaussian':
-            ynorm2 = jnp.nansum(jnp.square(y_train), axis = 1)
-            sigma2_hat = ynorm2/Ns
+        if sigma2_fixed is None:
+            if lik=='gaussian':
+                ynorm2 = jnp.nansum(jnp.square(y_train), axis = 1)
+                sigma2_hat = ynorm2/Ns
+            else:
+                sigma2_hat = jnp.ones(K)
         else:
-            sigma2_hat = jnp.ones(K)
+            sigma2_hat = jnp.ones(K) * sigma2_fixed
         sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P]) #TODO: Sort out exactly what we want wrt sigma and x2.
         s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
 
@@ -318,7 +332,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         tau_max *= (1+1e-1)
 
         tau_min = 1e-3*tau_max if N>P else 5e-2*tau_max
-        tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
+        if tau_range is None:
+            tau_range = np.flip(np.logspace(np.log10(tau_min), np.log10(tau_max), num = T))
 
     ## Trace storage
     etas = np.zeros([T, K, P])*np.nan
@@ -343,7 +358,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau)
         if novar:
             lam = lam_a
-            sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
+            if sigma2_fixed is None:
+                sigma2_hat = jnp.array([np.var(yk) for yk in y_train])
             s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
             sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
 
@@ -380,35 +396,31 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                     import IPython; IPython.embed()
 
                 if lik=='gaussian':
-                    ## Update variance estimate.
-                    if lam_it == lam_maxit and verbose:
-                        print("Reached max iters on lam update.")
-                    if cost_checks:
-                        nnz = jnp.sum(eta!=0, axis = 1)
-                        cost_before = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz)/2*jnp.log(sigma2_hat)
-                    sigma2_hat = update_sigma2(sigma2_hat, alpha, preds, Ns, eta, lam, v_f, x2, tau)
-                    #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
-                    sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P]) #TODO: Sort out exactly what we want wrt sigma and x2.
-                    s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
-                    if cost_checks:
-                        cost_after = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz)/2*jnp.log(sigma2_hat)
-                    if cost_checks and cost_after > cost_before + 1e-8:
-                        print("It's sigma2!")
-                        print(cost_after - cost_before)
-                        import IPython; IPython.embed()
+                    if sigma2_fixed is None:
+                        ## Update variance estimate.
+                        if lam_it == lam_maxit and verbose:
+                            print("Reached max iters on lam update.")
+                        if cost_checks:
+                            nnz = jnp.sum(eta!=0, axis = 1)
+                            cost_before = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz[-1])/2*jnp.log(sigma2_hat[-1])
+                        sigma2_hat = update_sigma2(sigma2_hat, alpha, preds, Ns, eta, lam, v_f, x2, tau)
+                        #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
+                        sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P]) #TODO: Sort out exactly what we want wrt sigma and x2.
+                        s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
+                        if cost_checks:
+                            cost_after = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz[-1])/2*jnp.log(sigma2_hat[-1])
+                        if cost_checks and cost_after > cost_before + 1e-8:
+                            print("It's sigma2!")
+                            print(cost_after - cost_before)
+                            import IPython; IPython.embed()
                 else:
                     ## Update xi, the locations about which series expansions are made for each term of the likelihood.
-                    preds_xi = (X_train @ eta[:,:,np.newaxis]).squeeze()
-                    if cost_checks:
-                        cost_before = xi_cost(xi, a)
+                    preds_xi = (X_train @ eta[:,:,np.newaxis]).reshape([K,N])
+                    #if cost_checks:
+                    #    cost_before = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                    #    cost_before += xi_cost(xi, a)
                     xi = jnp.sqrt(jnp.nansum(v_f*jnp.square(X_train/lam[:,np.newaxis,:]), axis = 2) + jnp.square(preds_xi))
                     a = a_xi(xi)
-                    if cost_checks:
-                        cost_after = xi_cost(xi, a)
-                    if cost_checks and cost_after > cost_before + 1e-8:
-                        print("It's a!")
-                        print(cost_after - cost_before)
-                        import IPython; IPython.embed()
                     ar = jnp.sqrt(2*a)
                     # DRY violation
                     alpha = 1/ar * (y_train - 0.5)
@@ -416,7 +428,15 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                     x2 = jnp.nansum(jnp.square(ALPHA), axis = 1)
                     s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
                     # DRY violation
-                    preds = (ALPHA @ eta[:,:,np.newaxis]).squeeze()
+                    preds = (ALPHA @ eta[:,:,np.newaxis]).reshape([K,N])
+                    #if cost_checks:
+                    #    cost_after = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
+                    #    cost_after += xi_cost(xi, a)
+                    #if cost_checks and cost_after > cost_before + 1e-8:
+                    #    print("Hey, aren't there constants taht are not included in this cost?")
+                    #    print("It's a!")
+                    #    print(cost_after - cost_before)
+                    #    import IPython; IPython.embed()
 
             diff = max([jnp.max(jnp.abs(eta_last-eta)), jnp.max(jnp.abs(lam_last-lam))])
 
@@ -445,7 +465,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         tau_opti = np.nanargmin(errs) # TODO: do we really want nanargmin here?
 
     if scale:
-        yy_hat + mu_y[:,np.newaxis,np.newaxis]
+        if lik=='gaussian':
+            yy_hat = yy_hat + mu_y[:,np.newaxis,np.newaxis]
         etas = 1/sig_X[np.newaxis,:,:] * etas 
         lams = np.square(sig_X)[np.newaxis,:,:] * lams
 
@@ -475,6 +496,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         dontplot = top_vars
         plt.plot(tau_range, np.delete(etas[:,-1,:], dontplot, axis = 1), color = 'gray')
         plt.xscale('log')
+        ll, ul = plt.gca().get_ylim()
+        if do_cv:
+            plt.vlines(tau_opti, ll, ul, linestyle='--', color = 'gray')
         plt.savefig(plotname)
         plt.close()
 
@@ -484,22 +508,24 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         return Q[tau_opti,-1,:], yy_hat[-1,tau_opti,:]
     else:
         #return Q.mean(), yy_hat[-1]
-        return Q, yy_hat[-1,:]
+        return Q[:,0,:], yy_hat[0,:,:]
 
-#if __name__=='__main__':
-#    np.random.seed(124)
-#    N = 40
-#    P = 40
-#    X = np.random.normal(size=[N,P])
-#    #y = X[:,0] + np.random.normal(size=N) + 50
-#    y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
-#    #y = -0.03*X[:,0] + np.random.normal(size=N) + 50
-#    XX = np.random.normal(size=[N,P])
-#
-#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-#    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
-#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = True)
-#
-#    #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-#    print(np.nanmax(np.abs(sbl_betas[:,-1,0]-ncv_betas[1,:])))
-#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+if __name__=='__main__':
+    np.random.seed(124)
+    N = 40
+    #P = 40
+    P = 2
+    X = np.random.normal(size=[N,P])
+    #y = X[:,0] + np.random.normal(size=N) + 50
+    y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
+    #y = -0.03*X[:,0] + np.random.normal(size=N) + 50
+    XX = np.random.normal(size=[N,P])
+
+    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False)
+    sbl_betas = sbl_betas.mean()
+
+    #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+    print(np.nanmax(np.abs(sbl_betas[:,0]-ncv_betas[1,:])))
+    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))

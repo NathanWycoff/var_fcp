@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#  neo_ncv_lab.py Author "Nathan Wycoff <nathanbrwycoff@gmail.com>" Date 07.03.2024
 
 import jax
 jax.config.update("jax_enable_x64", True)
@@ -20,16 +19,13 @@ from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 
 N = 100
 NN = 1000
-P = 10
+P = 2
 
 np.random.seed(123) # Q: how come we have so much less regularization than them?
-#np.random.seed(1234) # We do much better than them.
-#np.random.seed(1237) # Q: Our estimate is big: bigger than accurate, bigger than ncv_reg, and even bigger than a straight-up logistic regression!
-#np.random.seed(1241) 
 
 sigma = 1.
 
-lik = 'bernoulli'
+lik = 'gaussian'
 
 ## Compare on binomial data.
 X = np.random.normal(size=[N,P])
@@ -49,14 +45,16 @@ elif lik=='bernoulli':
 else:
     raise Exception("Bad lik")
 
-exec(open('python/bernoulli.py').read())
+#exec(open('python/bernoulli.py').read())
+exec(open('python/valencia.py').read())
 np.random.seed(123)
-fst_Q, fst_preds = pred_sbl(X, y, XX, do_cv = True, novar = False, cost_checks = True, lik = lik, penalty = 'laplace')
-print(fst_Q.mean())
+#fst_Q, fst_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False, lik = lik, penalty = 'MCP')
+fst_Q, _ = pred_sbl(X, y, XX, do_cv = False, novar = True)
+my_est = fst_Q.mean().squeeze()
 
-beta_ncv, yy_ncv = pred_ncv(X, y, XX, lik =lik)
-print(beta_ncv)
+#beta_ncv, yy_ncv = pred_ncv(X, y, XX, lik =lik)
+beta_ncv, yy_ncv = pred_ncv_no_cv(X, y, XX, lik =lik)
+patricks_est = beta_ncv[1:,:].T
 
-import statsmodels.api as sm
-sm.Logit(np.array(y), np.array(X)).fit().summary()
-sm.Logit(np.array(y), np.array(X)[:,:1]).fit().summary()
+my_est - patricks_est
+

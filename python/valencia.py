@@ -469,20 +469,21 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         #return Q.mean(), yy_hat[-1]
         return Q, yy_hat[-1]
 
-#if __name__=='__main__':
-#    np.random.seed(124)
-#    N = 40
-#    P = 40
-#    X = np.random.normal(size=[N,P])
-#    #y = X[:,0] + np.random.normal(size=N) + 50
-#    y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
-#    #y = -0.03*X[:,0] + np.random.normal(size=N) + 50
-#    XX = np.random.normal(size=[N,P])
-#
-#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-#    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
-#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = True)
-#
-#    #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-#    print(np.nanmax(np.abs(sbl_betas[:,-1,0]-ncv_betas[1,:])))
-#    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+if __name__=='__main__':
+    np.random.seed(124)
+    N = 40
+    P = 40
+    X = np.random.normal(size=[N,P])
+    #y = X[:,0] + np.random.normal(size=N) + 50
+    y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
+    #y = -0.03*X[:,0] + np.random.normal(size=N) + 50
+    XX = np.random.normal(size=[N,P])
+
+    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
+    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = True)
+
+    #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+    print(np.nanmax(np.abs(sbl_betas[:,-1,0]-ncv_betas[1,:])))
+    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+
