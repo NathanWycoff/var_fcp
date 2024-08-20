@@ -307,10 +307,13 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
 
     if novar:
         MCP_LAMBDA_max_scaled = np.sqrt(xmax) * MCP_LAMBDA_max 
+        #MCP_LAMBDA_max_scaled = MCP_LAMBDA_max 
         MCP_LAMBDA_min = 1e-3*MCP_LAMBDA_max_scaled if N>P else 5e-2*MCP_LAMBDA_max_scaled
         MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max_scaled), num = T))
         if tau_range is None:
             tau_range = A_MCP*np.square(MCP_LAMBDA_range)
+        else:
+            print("Tau range given; output will not match ncvreg.")
     else:
         ## Closed form optim
         #ynorm2 = np.array([np.sum(np.square(yt)) for yt in y_train])
@@ -363,8 +366,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     for t, tau in enumerate(tqdm(tau_range, disable = not verbose)):
         tau_effective = tau*jnp.ones(K) # TODO: Remove
 
-        #lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau/x2)
         lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau/x2)
+        #lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau)
         if novar:
             lam = lam_a
             if sigma2_fixed is None:
@@ -538,4 +541,4 @@ if __name__=='__main__':
 
     #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
     print(np.nanmax(np.abs(sbl_betas[:,0]-ncv_betas[1,:])))
-    print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+    #print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
