@@ -169,8 +169,15 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         eta_new = prox_Pv(ols*lam[:,p], jnp.square(lam[:,p])*tau_effective/x2[:,p])/lam[:,p]
         eta = eta.at[:,p].set(eta_new)
 
-        #gamma = lam*tau_effective
-        #a = 1/(np.square(lam)*tau_effective)
+        # gamma = lam*tau_effective/x2
+        # a = 1/(np.square(lam)*tau_effective/x2)
+        # np.sign(ols)*(np.abs(ols)-gamma) / (1-1/a)
+        # x = ols*lam[:,p]
+        # s = jnp.square(lam[:,p])*tau_effective/x2[:,p]
+        # s = 1/a
+        # np.sign(x) * (np.abs(x)-s)/(1-s) / lam[:,p]
+        # The problem:
+        # s - 1/a
 
         preds = pred_other + eta[:,p,np.newaxis] * X_train[:,:,p]
 
@@ -277,6 +284,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         # DRY violation
 
     x2 = jnp.nansum(jnp.square(ALPHA), axis = 1)
+    xmax = np.max(x2[-1,:])
 
     eta = jnp.zeros([K,P])
 
@@ -298,8 +306,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     preds = (ALPHA @ eta[:,:,np.newaxis]).reshape([K,N])
 
     if novar:
-        MCP_LAMBDA_min = 1e-3*MCP_LAMBDA_max if N>P else 5e-2*MCP_LAMBDA_max
-        MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max), num = T))
+        MCP_LAMBDA_max_scaled = np.sqrt(xmax) * MCP_LAMBDA_max 
+        MCP_LAMBDA_min = 1e-3*MCP_LAMBDA_max_scaled if N>P else 5e-2*MCP_LAMBDA_max_scaled
+        MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max_scaled), num = T))
         if tau_range is None:
             tau_range = A_MCP*np.square(MCP_LAMBDA_range)
     else:
@@ -321,7 +330,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         #lam = jnp.sqrt(Ns[:,np.newaxis]*v_f*x2/(Ns*sigma2_hat)[:,np.newaxis])*jnp.ones([K,P])
         lam = jnp.sqrt(x2*v_f/sigma2_wide)
 
-        xmax = np.max(x2[-1,:])
         lam_eta0 = np.min(lam)
 
         sbig = MCP_LAMBDA_max > 1/lam_eta0
@@ -350,12 +358,13 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #X.T @ X * a[0,0]*2
 
     it = 0
-    #ti = 0
+    #ti = 1
     #t, tau = ti, tau_range[ti]
     for t, tau in enumerate(tqdm(tau_range, disable = not verbose)):
-        tau_effective = tau*jnp.ones(K) # TODO: Remvoe
+        tau_effective = tau*jnp.ones(K) # TODO: Remove
 
-        lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau)
+        #lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau/x2)
+        lam_a = np.ones([K, P]) * 1/jnp.sqrt(A_MCP*tau/x2)
         if novar:
             lam = lam_a
             if sigma2_fixed is None:
@@ -523,6 +532,7 @@ if __name__=='__main__':
 
     ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
     #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
+    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False)
     sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False)
     sbl_betas = sbl_betas.mean()
 
