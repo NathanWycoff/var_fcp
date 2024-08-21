@@ -41,20 +41,23 @@ def lam_costs(lam, eta, X, sigma2, v_f, P_FCP, tau):
 
 ################################################################################################
 ## Us
-def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = True, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = False, max_nnz = np.inf, lik = 'gaussian', tau_range = None, sigma2_fixed = None):
+def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = True, verbose = True, do_cv = True, novar = False, plotname = 'traj.pdf', doplot = True, cost_checks = False, max_nnz = np.inf, lik = 'gaussian', tau_range = None, sigma2_fixed = None, A_MCP = None):
     assert not (np.any(np.isnan(X)) or np.any(np.isnan(y)) or np.any(np.isnan(XX)))
     assert lik in ['gaussian','bernoulli']
-    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = True; novar = False; plotname = 'traj.pdf'; cost_checks = False; max_nnz = np.inf; lik = 'bernoulli'; tau_range = None
-    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = True; plotname = 'traj.pdf'; cost_checks = False; max_nnz = np.inf; lik = 'gaussian'; tau_range = None; sigma2_fixed = None
-    if not do_cv:
-        print("New version not tested without CV.")
-    if novar:
-        print("New version not tested without var.")
+    #penalty = 'MCP'; add_intercept = True; scale = True; verbose = False; do_cv = False; novar = True; plotname = 'traj.pdf'; cost_checks = False; max_nnz = np.inf; lik = 'gaussian'; tau_range = None; sigma2_fixed = None; A_MCP = None
+    #if not do_cv:
+    #    print("New version not tested without CV.")
+    #if novar:
+    #    print("New version not tested without var.")
     if cost_checks:
         print("New version not tested with cost checks.")
-    A_MCP = 3.
     lam_maxit = 100
     N,P = X.shape
+    #A_MCP = 3.
+    if A_MCP is None:
+        A_MCP = np.repeat(3., P)
+    else:
+        assert len(A_MCP)==P
     X = jnp.array(X)
     y = jnp.array(y)
     if XX is not None:
@@ -311,7 +314,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         MCP_LAMBDA_min = 1e-3*MCP_LAMBDA_max_scaled if N>P else 5e-2*MCP_LAMBDA_max_scaled
         MCP_LAMBDA_range = np.flip(np.logspace(np.log10(MCP_LAMBDA_min), np.log10(MCP_LAMBDA_max_scaled), num = T))
         if tau_range is None:
-            tau_range = A_MCP*np.square(MCP_LAMBDA_range)
+            #tau_range = A_MCP*np.square(MCP_LAMBDA_range)
+            tau_range = np.max(A_MCP)*np.square(MCP_LAMBDA_range)
         else:
             print("Tau range given; output will not match ncvreg.")
     else:
@@ -522,23 +526,24 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         #return Q.mean(), yy_hat[-1]
         return Q[:,0,:], yy_hat[0,:,:]
 
-if __name__=='__main__':
-    np.random.seed(124)
-    N = 40
-    #P = 40
-    P = 2
-    X = np.random.normal(size=[N,P])
-    #y = X[:,0] + np.random.normal(size=N) + 50
-    y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
-    #y = -0.03*X[:,0] + np.random.normal(size=N) + 50
-    XX = np.random.normal(size=[N,P])
-
-    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
-    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
-    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False)
-    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False)
-    sbl_betas = sbl_betas.mean()
-
-    #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
-    print(np.nanmax(np.abs(sbl_betas[:,0]-ncv_betas[1,:])))
-    #print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+#if __name__=='__main__':
+#    np.random.seed(124)
+#    N = 40
+#    #P = 40
+#    P = 2
+#    X = np.random.normal(size=[N,P])
+#    #y = X[:,0] + np.random.normal(size=N) + 50
+#    y = -1.08 * X[:,0] + np.random.normal(size=N) + 50
+#    #y = -0.03*X[:,0] + np.random.normal(size=N) + 50
+#    XX = np.random.normal(size=[N,P])
+#
+#    ncv_betas, ncv_preds = pred_ncv_no_cv(X, y, XX)
+#    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True)
+#    #sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False)
+#    sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False)
+#    sbl_betas = sbl_betas.mean()
+#
+#    #print(np.nanmax(np.abs(sbl_betas[:,-1,2]-ncv_betas[3,:])))
+#    #print(np.nanmax(np.abs(sbl_betas[:,0]-ncv_betas[1,:])))
+#    #print(np.nanmax(np.abs(ncv_preds[0,:] - sbl_preds[:,0].T)))
+#    print(np.nanmax(np.abs(sbl_betas.T-ncv_betas[1:,:])))

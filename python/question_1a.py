@@ -17,44 +17,38 @@ from python.tfp_plus import tri_quant
 from scipy.optimize import minimize_scalar
 from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 
-N = 100
-NN = 1000
+N = 40
+#P = 40
 P = 2
+reps = 5
+seeds = np.arange(reps)
 
-np.random.seed(123) # Q: how come we have so much less regularization than them?
+exec(open('python/bernoulli.py').read())
 
-sigma = 1.
+Na = 100
+amin = 1.
+amax = 5.
+a_range = np.linspace(amin,amax,num=Na)
+errs = np.nan*np.zeros([Na,Na,reps])
 
-lik = 'gaussian'
+for si, seed in enumerate(tqdm(seeds)):
+    np.random.seed(seed)
+    X = np.random.normal(size=[N,P])
+    beta_true = np.array([-1.08] + [0 for _ in range(P-1)])
+    y = X@beta_true + np.random.normal(size=N) + 50
+    XX = np.random.normal(size=[N,P])
 
-## Compare on binomial data.
-X = np.random.normal(size=[N,P])
-XX = np.random.normal(size=[NN,P])
-#beta_true = np.array([0.5] + [0 for _ in range(P-1)])
-beta_true = np.array([0.4] + [0 for _ in range(P-1)])
-if lik=='gaussian':
-    y = X@beta_true + np.random.normal(scale=sigma,size=N)
-    yy = XX@beta_true + np.random.normal(scale=sigma,size=NN)
-elif lik=='bernoulli':
-    mu_y = X@beta_true 
-    mu_yy = XX@beta_true 
-    p_y = jax.nn.sigmoid(mu_y)
-    p_yy = jax.nn.sigmoid(mu_yy)
-    y = np.random.binomial(1,p=p_y)
-    yy = np.random.binomial(1,p=p_yy)
-else:
-    raise Exception("Bad lik")
+    for i, ai in enumerate(tqdm(a_range, leave = False)):
+        for j, aj in enumerate(tqdm(a_range, leave = False)):
+            sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False, A_MCP = np.array([ai, aj]), verbose = False)
+            sbl_betas = sbl_betas.mean()
+            #errs[i,j,si] = np.mean(np.square(sbl_betas - beta_true[np.newaxis,:]))
+            errs[i,j,si] = np.min(np.mean(np.square(sbl_betas - beta_true[np.newaxis,:]), axis = 1))
 
-#exec(open('python/bernoulli.py').read())
-exec(open('python/valencia.py').read())
-np.random.seed(123)
-#fst_Q, fst_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False, lik = lik, penalty = 'MCP')
-fst_Q, _ = pred_sbl(X, y, XX, do_cv = False, novar = True)
-my_est = fst_Q.mean().squeeze()
+err_mu = np.mean(errs, axis = 2)
 
-#beta_ncv, yy_ncv = pred_ncv(X, y, XX, lik =lik)
-beta_ncv, yy_ncv = pred_ncv_no_cv(X, y, XX, lik =lik)
-patricks_est = beta_ncv[1:,:].T
-
-my_est - patricks_est
-
+fig = plt.figure()
+plt.imshow(err_mu, extent = (amin, amax, amin, amax), origin = 'lower')
+plt.colorbar()
+plt.savefig("q1a.pdf")
+plt.close()
