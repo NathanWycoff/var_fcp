@@ -25,11 +25,17 @@ np.random.seed(123)
 #P = 40
 #nnz = 5
 
-lik = 'bernoulli'
+#lik = 'bernoulli'
+lik = 'gaussian'
 
-N = 1000
-P = 100
-nnz = 10
+#N = 1000
+#P = 100
+N = 40
+P = 1000
+#nnz = 10
+nnz = 1
+
+print("hey there's no intercept.")
 
 #N = 100
 #P = 1000
@@ -41,7 +47,8 @@ nnz = 10
 NN = 1000
 
 #nnz = 10
-reps = 5
+#reps = 5
+reps = 100
 #reps = 30
 #reps = 4
 
@@ -51,12 +58,13 @@ err_sbl = np.zeros(reps)*np.nan
 cov_sbl = np.zeros(reps)*np.nan
 err_ncv = np.zeros(reps)*np.nan
 for rep in tqdm(range(reps)):
-    beta_nz = np.random.normal(size=nnz)
+    #beta_nz = np.random.normal(size=nnz)
+    assert nnz==1
+    beta_nz = np.array([-1.08])
     nz_locs = np.random.choice(P,nnz,replace=False)
     beta_true = np.zeros(P)
     beta_true[nz_locs] = beta_nz
     #beta_true = np.concatenate([[50.], beta_true])
-    print("hey there's no intercept")
     beta_true = np.concatenate([[0.], beta_true])
 
     X = np.random.normal(size=[N,P])
@@ -96,8 +104,8 @@ for rep in tqdm(range(reps)):
 
     assert beta_sbl.shape==beta_true[1:].shape
     assert beta_ncv.shape==beta_true[1:].shape
-    err_sbl[rep] = np.mean(np.square(beta_sbl - beta_true[1:]))
-    err_ncv[rep] = np.mean(np.square(beta_ncv - beta_true[1:]))
+    err_sbl[rep] = np.sum(np.square(beta_sbl - beta_true[1:]))
+    err_ncv[rep] = np.sum(np.square(beta_ncv - beta_true[1:]))
 
     covered = np.logical_and(lb[nz_locs] <= beta_true[1:][nz_locs], ub[nz_locs] >= beta_true[1:][nz_locs])
     cov_sbl[rep] = np.mean(covered)
@@ -111,3 +119,4 @@ plt.close()
 
 print(err_ncv)
 print(err_sbl)
+

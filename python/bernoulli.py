@@ -367,6 +367,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #X_train[-1,:,:].T @ X_train[-1,:,:] * a[0,0]*2
     #X.T @ X * a[0,0]*2
 
+    nnz = jnp.sum(eta!=0, axis = 1)
     it = 0
     #ti = 1
     #t, tau = ti, tau_range[ti]
@@ -383,7 +384,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
             sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
 
         diff = np.inf
-        while (it < max_iters) and (diff > block_thresh*sdy):
+        while (it < max_iters) and (diff > block_thresh*sdy) and (nnz[-1] < max_nnz):
             it += 1
             eta_last = jnp.copy(eta)
             lam_last = jnp.copy(lam)
@@ -399,6 +400,7 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                 print(cost_after - cost_before)
                 import IPython; IPython.embed()
 
+            nnz = jnp.sum(eta!=0, axis = 1)
             if not novar:
                 if cost_checks:
                     cost_before = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP)
@@ -419,7 +421,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                         ## Update variance estimate.
                         if lam_it == lam_maxit and verbose:
                             print("Reached max iters on lam update.")
-                        nnz = jnp.sum(eta!=0, axis = 1)
                         if cost_checks:
                             cost_before = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz[-1])/2*jnp.log(sigma2_hat[-1])
                         if np.max(nnz) > N:
@@ -466,9 +467,9 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         lams_a[t,:,:] = lam_a
         yy_hat[:,t,:] = (X_test @ eta[:,:,np.newaxis]).squeeze()
 
-        nnz = np.sum(eta[-1,:]!=0)
-        if nnz >= max_nnz:
-            break
+        #nnz = np.sum(eta[-1,:]!=0)
+        #if nnz >= max_nnz:
+        #    break
 
     if verbose:
         if it==max_iters:
