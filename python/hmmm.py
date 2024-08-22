@@ -41,3 +41,7 @@ print(np.sum(np.square(sbl_betas-beta_true)))
 sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = True, novar = False, cost_checks = False, verbose = True, sigma2_fixed = None)
 sbl_betas = sbl_betas.mean()
 print(np.sum(np.square(sbl_betas-beta_true)))
+
+beta_ncv, yy_ncv = pred_ncv(X, y, XX, lik = 'gaussian')
+beta_ncv = beta_ncv[1:]
+print(np.sum(np.square(beta_ncv-beta_true)))
