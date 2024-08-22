@@ -32,38 +32,12 @@ y = X@beta_true + np.random.normal(size=N, scale = sigma) + 50
 XX = np.random.normal(size=[N,P])
 
 # Novar
-sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False, verbose = True, sigma2_fixed = None)
+#sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = True, cost_checks = False, verbose = True, sigma2_fixed = None)
+sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = True, novar = True, cost_checks = False, verbose = True, sigma2_fixed = None)
 sbl_betas = sbl_betas.mean()
-#errs[i,j,si] = np.mean(np.square(sbl_betas - beta_true[np.newaxis,:]))
-diffs = sbl_betas - beta_true[np.newaxis,:]
-sse_vs_tau = np.sum(np.square(diffs), axis = 1)
-optind = np.argmin(sse_vs_tau)
-sbl_betas[optind,:]
-print(np.min(sse_vs_tau))
+print(np.sum(np.square(sbl_betas-beta_true)))
 
 # Variational.
-sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = False, novar = False, cost_checks = False, verbose = True, sigma2_fixed = None)
+sbl_betas, sbl_preds = pred_sbl(X, y, XX, do_cv = True, novar = False, cost_checks = False, verbose = True, sigma2_fixed = None)
 sbl_betas = sbl_betas.mean()
-#errs[i,j,si] = np.mean(np.square(sbl_betas - beta_true[np.newaxis,:]))
-diffs = sbl_betas - beta_true[np.newaxis,:]
-sse_vs_tau = np.sum(np.square(diffs), axis = 1)
-optind = np.argmin(sse_vs_tau)
-sbl_betas[optind,:]
-print(np.min(sse_vs_tau))
-
-
-err_mu = np.mean(errs, axis = 2)
-
-fig = plt.figure()
-plt.imshow(err_mu, extent = (amin, amax, amin, amax), origin = 'lower')
-plt.colorbar()
-plt.savefig("q1a.pdf")
-plt.close()
-
-
-i,j = np.unravel_index(np.argmin(err_mu), err_mu.shape)
-a_range[i]
-a_range[j]
-err_mu[i,j]
-err_mu[Na//2,Na//2]
-
+print(np.sum(np.square(sbl_betas-beta_true)))

@@ -419,10 +419,10 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                         ## Update variance estimate.
                         if lam_it == lam_maxit and verbose:
                             print("Reached max iters on lam update.")
+                        nnz = jnp.sum(eta!=0, axis = 1)
                         if cost_checks:
-                            nnz = jnp.sum(eta!=0, axis = 1)
                             cost_before = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz[-1])/2*jnp.log(sigma2_hat[-1])
-                        if nnz > N:
+                        if np.max(nnz) > N:
                             raise Exception("nnz too big; sigma2 will be negative.")
                         sigma2_hat = update_sigma2(sigma2_hat, alpha, preds, Ns, eta, lam, v_f, x2, tau)
                         #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
