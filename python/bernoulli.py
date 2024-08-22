@@ -308,6 +308,19 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
     #preds = (ALPHA @ eta[:,:,np.newaxis]).squeeze()
     preds = (ALPHA @ eta[:,:,np.newaxis]).reshape([K,N])
 
+    # Initialize variance
+    if sigma2_fixed is None:
+        if lik=='gaussian':
+            ynorm2 = jnp.nansum(jnp.square(y_train), axis = 1)
+            sigma2_hat = ynorm2/Ns
+        else:
+            sigma2_hat = jnp.ones(K)
+    else:
+        sigma2_hat = jnp.ones(K) * sigma2_fixed
+    sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P]) #TODO: Sort out exactly what we want wrt sigma and x2.
+    s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
+
+    # Find tau range.
     if novar:
         MCP_LAMBDA_max_scaled = np.sqrt(xmax) * MCP_LAMBDA_max 
         #MCP_LAMBDA_max_scaled = MCP_LAMBDA_max 
@@ -322,16 +335,6 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
         ## Closed form optim
         #ynorm2 = np.array([np.sum(np.square(yt)) for yt in y_train])
 
-        if sigma2_fixed is None:
-            if lik=='gaussian':
-                ynorm2 = jnp.nansum(jnp.square(y_train), axis = 1)
-                sigma2_hat = ynorm2/Ns
-            else:
-                sigma2_hat = jnp.ones(K)
-        else:
-            sigma2_hat = jnp.ones(K) * sigma2_fixed
-        sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P]) #TODO: Sort out exactly what we want wrt sigma and x2.
-        s = sigma2_hat[:,jnp.newaxis] / x2 # Such that this is just 1/N?
 
         #print("Are we sure about these Ns? or should be x2?")
         #lam = jnp.sqrt(Ns[:,np.newaxis]*v_f*x2/(Ns*sigma2_hat)[:,np.newaxis])*jnp.ones([K,P])
@@ -419,6 +422,8 @@ def pred_sbl(X, y, XX = None, penalty = 'MCP', add_intercept = True, scale = Tru
                         if cost_checks:
                             nnz = jnp.sum(eta!=0, axis = 1)
                             cost_before = variational_cost(ALPHA[-1], alpha[-1], eta[-1,:], lam[-1,:], tau, sigma2_hat[-1], v_f, P_FCP) + (P-nnz[-1])/2*jnp.log(sigma2_hat[-1])
+                        if nnz > N:
+                            raise Exception("nnz too big; sigma2 will be negative.")
                         sigma2_hat = update_sigma2(sigma2_hat, alpha, preds, Ns, eta, lam, v_f, x2, tau)
                         #sigma2_wide = jnp.array([sigma2_hat[k]*jnp.ones(P) for k in range(K)])
                         sigma2_wide = sigma2_hat[:,np.newaxis] * jnp.ones([K,P]) #TODO: Sort out exactly what we want wrt sigma and x2.
