@@ -31,7 +31,7 @@ lik = 'gaussian'
 #N = 1000
 #P = 100
 N = 40
-P = 1000
+P = 10000
 #nnz = 10
 nnz = 1
 
@@ -48,8 +48,8 @@ NN = 1000
 
 #nnz = 10
 #reps = 5
-reps = 100
-#reps = 30
+#reps = 100
+reps = 30
 #reps = 4
 
 penalty = 'MCP'
@@ -120,3 +120,5 @@ plt.close()
 print(err_ncv)
 print(err_sbl)
 
+from scipy.stats import ranksums as rs
+rs(err_ncv, err_sbl)
