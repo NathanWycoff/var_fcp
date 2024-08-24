@@ -33,7 +33,8 @@ lik = 'gaussian'
 N = 40
 P = 10000
 #nnz = 10
-nnz = 1
+#nnz = 1
+nnz = 2
 
 print("hey there's no intercept.")
 
@@ -52,6 +53,8 @@ NN = 1000
 reps = 30
 #reps = 4
 
+big_nz = True
+
 penalty = 'MCP'
 
 err_sbl = np.zeros(reps)*np.nan
@@ -59,8 +62,11 @@ cov_sbl = np.zeros(reps)*np.nan
 err_ncv = np.zeros(reps)*np.nan
 for rep in tqdm(range(reps)):
     #beta_nz = np.random.normal(size=nnz)
-    assert nnz==1
-    beta_nz = np.array([-1.08])
+    beta_nz = np.random.normal(size=nnz)
+    if big_nz:
+        beta_nz = np.sign(beta_nz)*(np.abs(beta_nz)+1.)
+    #assert nnz==1
+    #beta_nz = np.array([-1.08])
     nz_locs = np.random.choice(P,nnz,replace=False)
     beta_true = np.zeros(P)
     beta_true[nz_locs] = beta_nz
@@ -121,4 +127,5 @@ print(err_ncv)
 print(err_sbl)
 
 from scipy.stats import ranksums as rs
-rs(err_ncv, err_sbl)
+print(rs(err_ncv, err_sbl))
+np.mean(err_ncv > err_sbl)
