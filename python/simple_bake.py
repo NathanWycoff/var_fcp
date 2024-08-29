@@ -30,11 +30,14 @@ lik = 'gaussian'
 
 #N = 1000
 #P = 100
-N = 40
-P = 10000
+#N = 40
+N = 100
+#P = 10000
+P = 100000
 #nnz = 10
 #nnz = 1
-nnz = 2
+#nnz = 2
+nnz = 5
 
 print("hey there's no intercept.")
 
