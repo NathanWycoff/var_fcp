@@ -28,16 +28,9 @@ np.random.seed(123)
 #lik = 'bernoulli'
 lik = 'gaussian'
 
-#N = 1000
-#P = 100
-#N = 40
-N = 100
-#P = 10000
-P = 100000
-#nnz = 10
-#nnz = 1
-#nnz = 2
-nnz = 5
+N = 40
+P = 10000
+nnz = 1
 
 print("hey there's no intercept.")
 
@@ -80,9 +73,8 @@ for rep in tqdm(range(reps)):
     X1 = np.concatenate([np.ones([N,1]), X], axis = 1)
     XX = np.random.normal(size=[NN,P])
     XX1 = np.concatenate([np.ones([NN,1]), XX], axis = 1)
-    sigma2_true = np.square(1)
-    #sigma2_true = np.square(1e-4)
-    #sigma2_true = np.square(1e4)
+    #sigma2_true = np.square(1)
+    sigma2_true = np.square(1e-1)
 
     if lik=='gaussian':
         y = X1@beta_true + np.random.normal(scale=sigma2_true,size=N)
@@ -120,7 +112,8 @@ for rep in tqdm(range(reps)):
     cov_sbl[rep] = np.mean(covered)
 
 fig = plt.figure()
-trans = np.log10
+#trans = np.log10
+trans = lambda x: np.log10(x[~np.isnan(x)])
 plt.boxplot([trans(err_ncv), trans(err_sbl)])
 #plt.boxplot(err_ncv-err_sbl)
 plt.savefig("bake.pdf")
@@ -131,4 +124,7 @@ print(err_sbl)
 
 from scipy.stats import ranksums as rs
 print(rs(err_ncv, err_sbl))
-np.mean(err_ncv > err_sbl)
+np.nansum(err_ncv > err_sbl) / np.sum(~np.isnan(err_sbl))
+np.nansum(err_ncv == err_sbl) / np.sum(~np.isnan(err_sbl))
+np.nansum(err_ncv < err_sbl) / np.sum(~np.isnan(err_sbl))
+
