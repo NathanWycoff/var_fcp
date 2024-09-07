@@ -9,21 +9,12 @@ exec(open('python/bernoulli.py').read())
 from python.ncvreg_wrapper import pred_ncv, pred_ncv_no_cv
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from scipy.stats import ranksums as rs
 
 ## Still to do:
 ## Intercepts!
 
 np.random.seed(123)
-
-## Smol but N>P
-#N = 10
-#P = 2
-#nnz = 2
-
-### Smolish and N=P
-#N = 40
-#P = 40
-#nnz = 5
 
 #lik = 'bernoulli'
 lik = 'gaussian'
@@ -31,6 +22,8 @@ lik = 'gaussian'
 N = 40
 P = 10000
 nnz = 1
+
+sigma2_true = np.square(1.)
 
 print("hey there's no intercept.")
 
@@ -49,7 +42,9 @@ NN = 1000
 reps = 30
 #reps = 4
 
-big_nz = True
+big_nz = False
+fix_nz = True
+assert not big_nz and fix_nz
 
 penalty = 'MCP'
 
@@ -61,8 +56,9 @@ for rep in tqdm(range(reps)):
     beta_nz = np.random.normal(size=nnz)
     if big_nz:
         beta_nz = np.sign(beta_nz)*(np.abs(beta_nz)+1.)
-    #assert nnz==1
-    #beta_nz = np.array([-1.08])
+    elif fix_nz:
+        beta_nz = np.array([-1.08])
+        assert nnz==1
     nz_locs = np.random.choice(P,nnz,replace=False)
     beta_true = np.zeros(P)
     beta_true[nz_locs] = beta_nz
@@ -73,8 +69,6 @@ for rep in tqdm(range(reps)):
     X1 = np.concatenate([np.ones([N,1]), X], axis = 1)
     XX = np.random.normal(size=[NN,P])
     XX1 = np.concatenate([np.ones([NN,1]), XX], axis = 1)
-    #sigma2_true = np.square(1)
-    sigma2_true = np.square(1e-1)
 
     if lik=='gaussian':
         y = X1@beta_true + np.random.normal(scale=sigma2_true,size=N)
@@ -116,15 +110,15 @@ fig = plt.figure()
 trans = lambda x: np.log10(x[~np.isnan(x)])
 plt.boxplot([trans(err_ncv), trans(err_sbl)])
 #plt.boxplot(err_ncv-err_sbl)
+#plt.boxplot(np.log10(err_ncv/err_sbl))
 plt.savefig("bake.pdf")
 plt.close()
 
 print(err_ncv)
 print(err_sbl)
 
-from scipy.stats import ranksums as rs
 print(rs(err_ncv, err_sbl))
-np.nansum(err_ncv > err_sbl) / np.sum(~np.isnan(err_sbl))
-np.nansum(err_ncv == err_sbl) / np.sum(~np.isnan(err_sbl))
-np.nansum(err_ncv < err_sbl) / np.sum(~np.isnan(err_sbl))
+print(np.nansum(err_ncv > err_sbl) / np.sum(~np.isnan(err_sbl)))
+print(np.nansum(err_ncv == err_sbl) / np.sum(~np.isnan(err_sbl)))
+print(np.nansum(err_ncv < err_sbl) / np.sum(~np.isnan(err_sbl)))
 
