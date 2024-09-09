@@ -14,7 +14,8 @@ from scipy.stats import ranksums as rs
 ## Still to do:
 ## Intercepts!
 
-np.random.seed(123)
+#np.random.seed(123)
+np.random.seed(271)
 
 #lik = 'bernoulli'
 lik = 'gaussian'
@@ -23,7 +24,8 @@ N = 40
 P = 10000
 nnz = 1
 
-sigma2_true = np.square(1.)
+#sigma2_true = np.square(1.)
+sigma2_true = np.square(2.)
 
 print("hey there's no intercept.")
 
@@ -40,6 +42,7 @@ NN = 1000
 #reps = 5
 #reps = 100
 reps = 30
+#reps = 50
 #reps = 4
 
 big_nz = False
