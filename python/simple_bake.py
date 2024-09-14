@@ -25,7 +25,9 @@ P = 10000
 nnz = 1
 
 #sigma2_true = np.square(1.)
-sigma2_true = np.square(2.)
+#sigma2_true = np.square(2.)
+#sigma2_true = np.square(0.5)
+sigma2_true = np.square(0.1)
 
 print("hey there's no intercept.")
 
@@ -41,8 +43,8 @@ NN = 1000
 #nnz = 10
 #reps = 5
 #reps = 100
-reps = 30
-#reps = 50
+#reps = 30
+reps = 50
 #reps = 4
 
 big_nz = False
